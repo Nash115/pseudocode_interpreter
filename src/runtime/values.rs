@@ -1,0 +1,51 @@
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use crate::runtime::environment::Environment;
+
+pub type FunctionCall = fn(Vec<RuntimeVal>, &mut Environment) -> RuntimeVal;
+
+#[derive(Clone)]
+pub enum RuntimeVal {
+    Null,
+    Number(f64),
+    Boolean(bool),
+    Object(Rc<RefCell<HashMap<String, RuntimeVal>>>),
+    NativeFn(FunctionCall),
+}
+
+impl std::fmt::Debug for RuntimeVal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeVal::Null => write!(f, "null"),
+            RuntimeVal::Number(n) => write!(f, "{}", n),
+            RuntimeVal::Boolean(b) => write!(f, "{}", b),
+            RuntimeVal::Object(o) => write!(f, "{:?}", o),
+            RuntimeVal::NativeFn(_) => write!(f, "[Native Function]"),
+        }
+    }
+}
+
+impl std::fmt::Display for RuntimeVal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RuntimeVal::Null => write!(f, "nul"),
+            RuntimeVal::Number(n) => write!(f, "{}", n),
+            RuntimeVal::Boolean(true) => write!(f, "vrai"),
+            RuntimeVal::Boolean(false) => write!(f, "faux"),
+            RuntimeVal::Object(map) => {
+                let borrowed = map.borrow();
+                if borrowed.is_empty() {
+                    return write!(f, "{{}}");
+                }
+                let mut entries = Vec::new();
+                for (key, val) in borrowed.iter() {
+                    entries.push(format!("\"{}\": {}", key, val));
+                }
+                return write!(f, "{{{}}}", entries.join(","));
+            }
+            RuntimeVal::NativeFn(_) => write!(f, "[Fonction native]"),
+        }
+    }
+}

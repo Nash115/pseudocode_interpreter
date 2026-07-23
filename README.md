@@ -1,2 +1,1 @@
-# pseudocode_compiler
-
+# pseudocode_interpreter
