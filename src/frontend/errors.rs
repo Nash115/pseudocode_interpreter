@@ -38,9 +38,11 @@ impl Colors {
     }
 }
 
+#[derive(Debug)]
 pub enum LexerError {
     UnknownCharacter(char),
 }
+impl std::error::Error for LexerError {}
 impl std::fmt::Display for LexerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = Colors::error("[LEXER ERROR]");
@@ -52,6 +54,7 @@ impl std::fmt::Display for LexerError {
     }
 }
 
+#[derive(Debug)]
 pub enum ParserError {
     TokenExpected {
         expected: TokenType,
@@ -68,6 +71,7 @@ pub enum ParserError {
     },
     ParsingNumber(ParseFloatError),
 }
+impl std::error::Error for ParserError {}
 impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = Colors::error("[PARSER ERROR]");
@@ -116,6 +120,7 @@ impl std::fmt::Display for ParserError {
     }
 }
 
+#[derive(Debug)]
 pub enum InterpreterError {
     UnexpectedReturn,
     VarAlreadyDeclared(String),
@@ -142,6 +147,7 @@ pub enum InterpreterError {
         given: usize,
     },
 }
+impl std::error::Error for InterpreterError {}
 impl std::fmt::Display for InterpreterError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let prefix = Colors::error("[ERROR]");

@@ -83,58 +83,61 @@ fn keyword(str: String) -> TokenType {
 }
 
 fn skippable(car: char) -> bool {
-    return if car == ' ' || car == '\n' || car == '\t' || car == '\r' {
-        true
-    } else {
-        false
-    };
+    car.is_whitespace()
 }
 
 pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
     let mut tokens = Vec::new();
-    let mut src = source_code.chars().collect::<Vec<char>>();
+    let mut chars = source_code.chars().peekable();
 
-    while src.len() > 0 {
-        if src[0] == '(' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::OpenParen));
-        } else if src[0] == ')' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::CloseParen));
-        } else if src[0] == '{' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::OpenBrace));
-        } else if src[0] == '}' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::CloseBrace));
-        } else if src[0] == '[' {
-            tokens.push(Token::new(
-                src.remove(0).to_string(),
-                TokenType::OpenBracket,
-            ));
-        } else if src[0] == ']' {
-            tokens.push(Token::new(
-                src.remove(0).to_string(),
-                TokenType::CloseBracket,
-            ));
-        } else if src[0] == '+' || src[0] == '-' || src[0] == '*' || src[0] == '/' || src[0] == '%'
-        {
-            tokens.push(Token::new(
-                src.remove(0).to_string(),
-                TokenType::BinaryOperator,
-            ));
-        } else if src[0] == '=' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::Equals));
-        } else if src[0] == ',' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::Comma));
-        } else if src[0] == '.' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::Dot));
-        } else if src[0] == ':' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::Colon));
-        } else if src[0] == ';' {
-            tokens.push(Token::new(src.remove(0).to_string(), TokenType::Semicolon));
+    while let Some(&c) = chars.peek() {
+        if c == '(' {
+            tokens.push(Token::new(c.to_string(), TokenType::OpenParen));
+            chars.next();
+        } else if c == ')' {
+            tokens.push(Token::new(c.to_string(), TokenType::CloseParen));
+            chars.next();
+        } else if c == '{' {
+            tokens.push(Token::new(c.to_string(), TokenType::OpenBrace));
+            chars.next();
+        } else if c == '}' {
+            tokens.push(Token::new(c.to_string(), TokenType::CloseBrace));
+            chars.next();
+        } else if c == '[' {
+            tokens.push(Token::new(c.to_string(), TokenType::OpenBracket));
+            chars.next();
+        } else if c == ']' {
+            tokens.push(Token::new(c.to_string(), TokenType::CloseBracket));
+            chars.next();
+        } else if c == '+' || c == '-' || c == '*' || c == '/' || c == '%' {
+            tokens.push(Token::new(c.to_string(), TokenType::BinaryOperator));
+            chars.next();
+        } else if c == '=' {
+            tokens.push(Token::new(c.to_string(), TokenType::Equals));
+            chars.next();
+        } else if c == ',' {
+            tokens.push(Token::new(c.to_string(), TokenType::Comma));
+            chars.next();
+        } else if c == '.' {
+            tokens.push(Token::new(c.to_string(), TokenType::Dot));
+            chars.next();
+        } else if c == ':' {
+            tokens.push(Token::new(c.to_string(), TokenType::Colon));
+            chars.next();
+        } else if c == ';' {
+            tokens.push(Token::new(c.to_string(), TokenType::Semicolon));
+            chars.next();
         } else {
             // Multicharacter tokens
-            if src[0].is_alphabetic() {
-                let mut ident: String = "".to_string();
-                while src.len() > 0 && src[0].is_alphanumeric() {
-                    ident = format!("{}{}", ident, src.remove(0));
+            if c.is_alphabetic() {
+                let mut ident = String::new();
+                while let Some(&next_c) = chars.peek() {
+                    if next_c.is_alphanumeric() {
+                        ident.push(next_c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
                 }
                 let t: TokenType = keyword(ident.clone());
                 match t {
@@ -151,16 +154,21 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
                     )),
                     _ => tokens.push(Token::new(ident, t)),
                 }
-            } else if src[0].is_numeric() {
-                let mut num: String = "".to_string();
-                while src.len() > 0 && (src[0].is_numeric() || src[0] == '.') {
-                    num = format!("{}{}", num, src.remove(0));
+            } else if c.is_numeric() {
+                let mut num = String::new();
+                while let Some(&next_c) = chars.peek() {
+                    if next_c.is_numeric() || next_c == '.' {
+                        num.push(next_c);
+                        chars.next();
+                    } else {
+                        break;
+                    }
                 }
                 tokens.push(Token::new(num, TokenType::Number));
-            } else if skippable(src[0]) {
-                src.remove(0);
+            } else if skippable(c) {
+                chars.next();
             } else {
-                return Err(LexerError::UnknownCharacter(src[0]));
+                return Err(LexerError::UnknownCharacter(c));
             }
         }
     }
