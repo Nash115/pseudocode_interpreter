@@ -7,6 +7,15 @@ pub enum Expr {
         right: Box<Expr>,
         operator: String,
     },
+    UnaryExpr {
+        right: Box<Expr>,
+        operator: String,
+    },
+    LogicalExpr {
+        left: Box<Expr>,
+        right: Box<Expr>,
+        operator: String,
+    },
     ObjectLiteral(Vec<ObjectProperty>),
     AssignmentExpr {
         assigne: Box<Expr>,
@@ -31,6 +40,12 @@ pub enum Stmt {
         identifier: String,
         value: Option<Expr>,
     },
+    FnDeclaration {
+        name: String,
+        parameters: Vec<String>,
+        body: Vec<Stmt>,
+    },
+    Return(Expr),
     ExprStmt(Expr),
 }
 

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use crate::frontend::ast::Stmt;
 use crate::runtime::environment::Environment;
 
 pub type FunctionCall = fn(Vec<RuntimeVal>, &mut Environment) -> RuntimeVal;
@@ -13,6 +14,12 @@ pub enum RuntimeVal {
     Boolean(bool),
     Object(Rc<RefCell<HashMap<String, RuntimeVal>>>),
     NativeFn(FunctionCall),
+    Fn {
+        name: String,
+        parameters: Vec<String>,
+        declaration_env: usize,
+        body: Vec<Stmt>,
+    },
 }
 
 impl std::fmt::Debug for RuntimeVal {
@@ -23,6 +30,7 @@ impl std::fmt::Debug for RuntimeVal {
             RuntimeVal::Boolean(b) => write!(f, "{}", b),
             RuntimeVal::Object(o) => write!(f, "{:?}", o),
             RuntimeVal::NativeFn(_) => write!(f, "[Native Function]"),
+            RuntimeVal::Fn { .. } => write!(f, "[Function]"),
         }
     }
 }
@@ -30,10 +38,10 @@ impl std::fmt::Debug for RuntimeVal {
 impl std::fmt::Display for RuntimeVal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RuntimeVal::Null => write!(f, "nul"),
+            RuntimeVal::Null => write!(f, "null"),
             RuntimeVal::Number(n) => write!(f, "{}", n),
-            RuntimeVal::Boolean(true) => write!(f, "vrai"),
-            RuntimeVal::Boolean(false) => write!(f, "faux"),
+            RuntimeVal::Boolean(true) => write!(f, "true"),
+            RuntimeVal::Boolean(false) => write!(f, "false"),
             RuntimeVal::Object(map) => {
                 let borrowed = map.borrow();
                 if borrowed.is_empty() {
@@ -41,11 +49,12 @@ impl std::fmt::Display for RuntimeVal {
                 }
                 let mut entries = Vec::new();
                 for (key, val) in borrowed.iter() {
-                    entries.push(format!("\"{}\": {}", key, val));
+                    entries.push(format!("{}: {}", key, val));
                 }
                 return write!(f, "{{{}}}", entries.join(","));
             }
-            RuntimeVal::NativeFn(_) => write!(f, "[Fonction native]"),
+            RuntimeVal::NativeFn(_) => write!(f, "[Native Function]"),
+            RuntimeVal::Fn { .. } => write!(f, "[Function]"),
         }
     }
 }

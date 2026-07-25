@@ -1,14 +1,4 @@
-pub enum LexerErrors {
-    UnknownCharacter(char),
-}
-
-impl std::fmt::Display for LexerErrors {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LexerErrors::UnknownCharacter(c) => write!(f, "Unknown character '{}'", c),
-        }
-    }
-}
+use crate::frontend::errors::LexerError;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
@@ -19,9 +9,14 @@ pub enum TokenType {
     // Keywords
     Let,
     Const,
+    FnStart,
+    FnEnd,
+    Return,
 
     // Grouping, Operators
     BinaryOperator,
+    UnaryOperator,
+    LogicalOperator,
     Equals,
     Comma,
     Dot,
@@ -54,8 +49,35 @@ impl Token {
 
 fn keyword(str: String) -> TokenType {
     match str.as_str() {
-        "VARIABLE" => TokenType::Let,
-        "CONSTANTE" => TokenType::Const,
+        // Let
+        "var" => TokenType::Let,
+        "let" => TokenType::Let,
+        "variable" => TokenType::Let,
+        // Const
+        "const" => TokenType::Const,
+        "constante" => TokenType::Const,
+        // Fn
+        "fn" => TokenType::FnStart,
+        "function" => TokenType::FnStart,
+        "fonction" => TokenType::FnStart,
+        "procedure" => TokenType::FnStart,
+        "endFn" => TokenType::FnEnd,
+        "finFn" => TokenType::FnEnd,
+        "endFunction" => TokenType::FnEnd,
+        "finFonction" => TokenType::FnEnd,
+        "endProcedure" => TokenType::FnEnd,
+        "finProcedure" => TokenType::FnEnd,
+        "return" => TokenType::Return,
+        "retourner" => TokenType::Return,
+        "renvoyer" => TokenType::Return,
+        // Logical operators
+        "not" => TokenType::UnaryOperator,
+        "non" => TokenType::UnaryOperator,
+        "and" => TokenType::LogicalOperator,
+        "et" => TokenType::LogicalOperator,
+        "or" => TokenType::LogicalOperator,
+        "ou" => TokenType::LogicalOperator,
+        // Fallback
         _ => TokenType::Identifier,
     }
 }
@@ -68,7 +90,7 @@ fn skippable(car: char) -> bool {
     };
 }
 
-pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerErrors> {
+pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
     let mut tokens = Vec::new();
     let mut src = source_code.chars().collect::<Vec<char>>();
 
@@ -115,17 +137,30 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerErrors> {
                     ident = format!("{}{}", ident, src.remove(0));
                 }
                 let t: TokenType = keyword(ident.clone());
-                tokens.push(Token::new(ident, t));
+                match t {
+                    TokenType::UnaryOperator => tokens.push(Token::new("!".to_string(), t)),
+                    TokenType::LogicalOperator => tokens.push(Token::new(
+                        match ident.as_str() {
+                            "and" => "&&".to_string(),
+                            "et" => "&&".to_string(),
+                            "or" => "||".to_string(),
+                            "ou" => "||".to_string(),
+                            _ => ident,
+                        },
+                        t,
+                    )),
+                    _ => tokens.push(Token::new(ident, t)),
+                }
             } else if src[0].is_numeric() {
                 let mut num: String = "".to_string();
-                while src.len() > 0 && src[0].is_numeric() {
+                while src.len() > 0 && (src[0].is_numeric() || src[0] == '.') {
                     num = format!("{}{}", num, src.remove(0));
                 }
                 tokens.push(Token::new(num, TokenType::Number));
             } else if skippable(src[0]) {
                 src.remove(0);
             } else {
-                return Err(LexerErrors::UnknownCharacter(src[0]));
+                return Err(LexerError::UnknownCharacter(src[0]));
             }
         }
     }

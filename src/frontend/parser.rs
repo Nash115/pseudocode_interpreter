@@ -1,6 +1,5 @@
-use std::process::exit;
-
 use crate::frontend::ast::{Expr, ObjectProperty, Stmt};
+use crate::frontend::errors::ParserError;
 use crate::frontend::lexer::{Token, TokenType};
 
 pub struct Parser {
@@ -31,95 +30,156 @@ impl Parser {
         self.at().token_type != TokenType::EOF
     }
 
-    fn expect(&mut self, expected_type: TokenType, err_msg: &str) -> Token {
+    fn expect(&mut self, expected_type: TokenType, err_msg: &str) -> Result<Token, ParserError> {
         let prev = self.eat();
         if prev.token_type != expected_type {
-            println!(
-                "Parser error:\n{} - Expecting: {:?}, found: {:?}",
-                err_msg, expected_type, prev.token_type
-            );
-            exit(1);
+            return Err(ParserError::TokenExpected {
+                expected: expected_type,
+                found: prev,
+                hint: err_msg.to_string(),
+            });
         }
-        prev
+        Ok(prev)
     }
 
-    pub fn produce_ast(&mut self) -> Stmt {
+    pub fn produce_ast(&mut self) -> Result<Stmt, ParserError> {
         let mut program_body = Vec::new();
 
         while self.not_eof() {
-            program_body.push(self.parse_statement());
+            program_body.push(self.parse_statement()?);
         }
 
-        Stmt::Program(program_body)
+        Ok(Stmt::Program(program_body))
     }
 
-    fn parse_statement(&mut self) -> Stmt {
+    fn parse_statement(&mut self) -> Result<Stmt, ParserError> {
         match self.at().token_type {
             TokenType::Let | TokenType::Const => self.parse_var_declaration(),
-            _ => Stmt::ExprStmt(self.parse_expression()),
+            TokenType::FnStart => self.parse_fn_declaration(),
+            TokenType::Return => self.parse_return(),
+            _ => Ok(Stmt::ExprStmt(self.parse_expression()?)),
         }
     }
 
-    fn parse_var_declaration(&mut self) -> Stmt {
+    fn parse_return(&mut self) -> Result<Stmt, ParserError> {
+        self.eat();
+        let right = self.parse_expression()?;
+        Ok(Stmt::Return(right))
+    }
+
+    fn parse_fn_declaration(&mut self) -> Result<Stmt, ParserError> {
+        self.eat();
+
+        let name = self
+            .expect(TokenType::Identifier, "Expect functionn name")?
+            .value;
+
+        let args = self.parse_args()?;
+        let mut params: Vec<String> = Vec::new();
+        for arg in args {
+            match arg {
+                Expr::Identifier(s) => {
+                    params.push(s);
+                }
+                _ => {
+                    return Err(ParserError::Unexpected {
+                        expected: String::from("identifier"),
+                        hint: String::from("Expecting identifiers as arguments to the function"),
+                    });
+                }
+            }
+        }
+
+        let mut body: Vec<Stmt> = Vec::new();
+
+        while self.at().token_type != TokenType::EOF && self.at().token_type != TokenType::FnEnd {
+            body.push(self.parse_statement()?);
+        }
+
+        self.expect(
+            TokenType::FnEnd,
+            "End function definition keyword expected at the end of the defined function.",
+        )?;
+
+        Ok(Stmt::FnDeclaration {
+            name,
+            parameters: params,
+            body: body,
+        })
+    }
+
+    fn parse_var_declaration(&mut self) -> Result<Stmt, ParserError> {
         let is_constant = self.eat().token_type == TokenType::Const;
         let identifier = self
             .expect(
                 TokenType::Identifier,
-                "Expecting identifier name after variable declaration keyword.",
-            )
+                "Expecting name (identifier) after variable declaration keyword.",
+            )?
             .value;
-
-        if self.at().token_type == TokenType::Semicolon {
-            self.eat();
-            if is_constant {
-                println!("Unexpected semicolon. A constant must be declared with a value.");
-                exit(1);
-            }
-            return Stmt::VarDeclaration {
-                constant: false,
-                identifier: identifier,
-                value: None,
-            };
-        }
 
         self.expect(
             TokenType::Equals,
             "Expecting '=' after identifier for a variable declaration.",
-        );
+        )?;
 
         let declaration = Stmt::VarDeclaration {
             constant: is_constant,
             identifier,
-            value: Some(self.parse_expression()),
+            value: Some(self.parse_expression()?),
         };
 
-        if self.at().token_type == TokenType::Semicolon {
-            self.eat();
-        }
-
-        declaration
+        Ok(declaration)
     }
 
-    fn parse_expression(&mut self) -> Expr {
+    fn parse_expression(&mut self) -> Result<Expr, ParserError> {
         self.parse_assignment_expr()
     }
 
-    fn parse_assignment_expr(&mut self) -> Expr {
-        let left = self.parse_object_expr();
+    fn parse_assignment_expr(&mut self) -> Result<Expr, ParserError> {
+        let left = self.parse_logical_expr()?;
 
         if self.at().token_type == TokenType::Equals {
             self.eat();
-            let value = self.parse_assignment_expr();
-            return Expr::AssignmentExpr {
+            let value = self.parse_assignment_expr()?;
+            return Ok(Expr::AssignmentExpr {
                 assigne: Box::new(left),
                 value: Box::new(value),
-            };
+            });
         }
 
-        left
+        Ok(left)
     }
 
-    fn parse_object_expr(&mut self) -> Expr {
+    fn parse_logical_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.parse_unary_expr()?;
+
+        while self.at().token_type == TokenType::LogicalOperator {
+            let operator = self.eat().value.to_string();
+            let right = self.parse_unary_expr()?;
+            left = Expr::LogicalExpr {
+                left: Box::new(left),
+                right: Box::new(right),
+                operator,
+            }
+        }
+
+        Ok(left)
+    }
+
+    fn parse_unary_expr(&mut self) -> Result<Expr, ParserError> {
+        if self.at().token_type == TokenType::UnaryOperator {
+            let operator = self.eat().value;
+            let right = self.parse_unary_expr()?;
+            return Ok(Expr::UnaryExpr {
+                right: Box::new(right),
+                operator,
+            });
+        }
+
+        self.parse_object_expr()
+    }
+
+    fn parse_object_expr(&mut self) -> Result<Expr, ParserError> {
         if self.at().token_type != TokenType::OpenBrace {
             return self.parse_additive_expr();
         }
@@ -129,7 +189,7 @@ impl Parser {
 
         while self.not_eof() && self.at().token_type != TokenType::CloseBrace {
             let key = self
-                .expect(TokenType::Identifier, "Object litteral key expected")
+                .expect(TokenType::Identifier, "Object litteral key expected")?
                 .value;
 
             if self.at().token_type == TokenType::Comma {
@@ -151,8 +211,8 @@ impl Parser {
             self.expect(
                 TokenType::Colon,
                 "Missing ':' following identifier in object expression",
-            );
-            let value = self.parse_expression();
+            )?;
+            let value = self.parse_expression()?;
 
             properties.push(ObjectProperty {
                 key: key,
@@ -160,21 +220,21 @@ impl Parser {
             });
 
             if self.at().token_type != TokenType::CloseBrace {
-                self.expect(TokenType::Comma, "Expecting ',' or '}' following property");
+                self.expect(TokenType::Comma, "Expecting ',' or '}' following property")?;
             }
         }
 
-        self.expect(TokenType::CloseBrace, "Object litteral missing '}'");
+        self.expect(TokenType::CloseBrace, "Object litteral missing '}'")?;
 
-        Expr::ObjectLiteral(properties)
+        Ok(Expr::ObjectLiteral(properties))
     }
 
-    fn parse_additive_expr(&mut self) -> Expr {
-        let mut left = self.parse_multiplicative_expr();
+    fn parse_additive_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.parse_multiplicative_expr()?;
 
         while self.at().value == "+" || self.at().value == "-" {
             let operator = self.eat().value.to_string();
-            let right = self.parse_multiplicative_expr();
+            let right = self.parse_multiplicative_expr()?;
             left = Expr::BinaryExpr {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -182,15 +242,15 @@ impl Parser {
             }
         }
 
-        left
+        Ok(left)
     }
 
-    fn parse_multiplicative_expr(&mut self) -> Expr {
-        let mut left = self.parse_call_member_expr();
+    fn parse_multiplicative_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut left = self.parse_call_member_expr()?;
 
         while self.at().value == "*" || self.at().value == "/" || self.at().value == "%" {
             let operator = self.eat().value.to_string();
-            let right = self.parse_call_member_expr();
+            let right = self.parse_call_member_expr()?;
             left = Expr::BinaryExpr {
                 left: Box::new(left),
                 right: Box::new(right),
@@ -198,49 +258,49 @@ impl Parser {
             }
         }
 
-        left
+        Ok(left)
     }
 
-    fn parse_call_member_expr(&mut self) -> Expr {
-        let member = self.parse_member_expr();
+    fn parse_call_member_expr(&mut self) -> Result<Expr, ParserError> {
+        let member = self.parse_member_expr()?;
         if self.at().token_type == TokenType::OpenParen {
             return self.parse_call_expr(member);
         }
-        member
+        Ok(member)
     }
 
-    fn parse_call_expr(&mut self, caller: Expr) -> Expr {
+    fn parse_call_expr(&mut self, caller: Expr) -> Result<Expr, ParserError> {
         let mut call_expr = Expr::CallExpr {
-            args: self.parse_args(),
+            args: self.parse_args()?,
             caller: Box::new(caller),
         };
         if self.at().token_type == TokenType::OpenParen {
-            call_expr = self.parse_call_expr(call_expr);
+            call_expr = self.parse_call_expr(call_expr)?;
         }
-        call_expr
+        Ok(call_expr)
     }
 
-    fn parse_args(&mut self) -> Vec<Expr> {
-        self.expect(TokenType::OpenParen, "Expect '(' before arguments");
+    fn parse_args(&mut self) -> Result<Vec<Expr>, ParserError> {
+        self.expect(TokenType::OpenParen, "Expect '(' before arguments")?;
         let args = match self.at().token_type {
             TokenType::CloseParen => Vec::new(),
-            _ => self.parse_arguments_list(),
+            _ => self.parse_arguments_list()?,
         };
-        self.expect(TokenType::CloseParen, "Expect ')' after arguments");
-        args
+        self.expect(TokenType::CloseParen, "Expect ')' after arguments")?;
+        Ok(args)
     }
 
-    fn parse_arguments_list(&mut self) -> Vec<Expr> {
+    fn parse_arguments_list(&mut self) -> Result<Vec<Expr>, ParserError> {
         let mut args = Vec::new();
-        args.push(self.parse_assignment_expr());
+        args.push(self.parse_assignment_expr()?);
         while self.not_eof() && self.at().token_type == TokenType::Comma && self.eatable() {
-            args.push(self.parse_assignment_expr());
+            args.push(self.parse_assignment_expr()?);
         }
-        args
+        Ok(args)
     }
 
-    fn parse_member_expr(&mut self) -> Expr {
-        let mut object = self.parse_primary_expr();
+    fn parse_member_expr(&mut self) -> Result<Expr, ParserError> {
+        let mut object = self.parse_primary_expr()?;
         while self.at().token_type == TokenType::Dot
             || self.at().token_type == TokenType::OpenBracket
         {
@@ -250,18 +310,20 @@ impl Parser {
 
             if operator.token_type == TokenType::Dot {
                 computed = false;
-                property = self.parse_primary_expr();
+                property = self.parse_primary_expr()?;
                 match property {
                     Expr::Identifier(_) => {}
                     _ => {
-                        println!("Cannot use '.' without an identifier on the right");
-                        exit(1);
+                        return Err(ParserError::Unexpected {
+                            expected: String::from("identifier"),
+                            hint: String::from("Cannot use '.' without an identifier on the right"),
+                        });
                     }
                 }
             } else {
                 computed = true;
-                property = self.parse_expression();
-                self.expect(TokenType::CloseBracket, "Missing ']'");
+                property = self.parse_expression()?;
+                self.expect(TokenType::CloseBracket, "Missing ']'")?;
             }
 
             object = Expr::MemberExpr {
@@ -271,23 +333,47 @@ impl Parser {
             };
         }
 
-        object
+        Ok(object)
     }
 
-    fn parse_primary_expr(&mut self) -> Expr {
+    fn parse_primary_expr(&mut self) -> Result<Expr, ParserError> {
         match self.at().token_type {
-            TokenType::Identifier => Expr::Identifier(self.eat().value.clone()),
-            TokenType::Number => Expr::NumericLiteral(self.eat().value.clone().parse().unwrap()),
+            TokenType::Identifier => Ok(Expr::Identifier(self.eat().value.clone())),
+            TokenType::Number => Ok(Expr::NumericLiteral(
+                match self.eat().value.clone().parse() {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return Err(ParserError::ParsingNumber(e));
+                    }
+                },
+            )),
             TokenType::OpenParen => {
                 self.eat();
                 let value = self.parse_expression();
-                self.expect(TokenType::CloseParen, "Expecting closing parenthesis");
+                self.expect(TokenType::CloseParen, "Expecting closing parenthesis")?;
                 value
             }
-            _ => {
-                println!("Unexpected token: {:?} during parsing", self.at());
-                exit(1);
+            TokenType::BinaryOperator => {
+                let operator = self.eat().value;
+                let v = self.parse_expression()?;
+                match v {
+                    Expr::NumericLiteral(_) | Expr::Identifier(_) | Expr::BinaryExpr { .. } => {
+                        Ok(Expr::BinaryExpr {
+                            left: Box::new(Expr::NumericLiteral(0.0)),
+                            right: Box::new(v),
+                            operator,
+                        })
+                    }
+                    _ => Err(ParserError::UnexpectedToken {
+                        found: self.at().clone(),
+                        hint: String::from("Unexpected token after a binary operator"),
+                    }),
+                }
             }
+            _ => Err(ParserError::UnexpectedToken {
+                found: self.at().clone(),
+                hint: String::from("Unexpected token during parsing"),
+            }),
         }
     }
 }

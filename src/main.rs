@@ -6,11 +6,11 @@ use std::process::exit;
 mod frontend;
 mod runtime;
 
-use frontend::lexer::tokenize;
-use frontend::parser::Parser;
-use runtime::environment::Environment;
-use runtime::interpreter;
-
+use crate::frontend::errors::{InterpreterError, LexerError, ParserError};
+use crate::frontend::lexer::tokenize;
+use crate::frontend::parser::Parser;
+use crate::runtime::environment::Environment;
+use crate::runtime::interpreter;
 use crate::runtime::values::RuntimeVal;
 
 fn get_user_input() -> String {
@@ -32,21 +32,36 @@ fn get_user_input() -> String {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let mut env = Environment::new();
+    let mut env = match Environment::new() {
+        Ok(e) => e,
+        Err(e) => {
+            eprintln!("Error creating Environment : {}", e);
+            exit(1);
+        }
+    };
 
     if args.len() >= 2 {
         let filename = &args[1];
         let code = fs::read_to_string(filename).expect(&format!("Error reading file {}", filename));
-        let tokens = match tokenize(&code) {
-            Ok(t) => t,
+        let result = match tokenize(&code) {
+            Ok(tokens) => match Parser::new(tokens).produce_ast() {
+                Ok(program) => match interpreter::evaluate(program, &mut env) {
+                    Ok(r) => r,
+                    Err(e) => {
+                        eprintln!("{}", e);
+                        exit(1);
+                    }
+                },
+                Err(e) => {
+                    eprintln!("{}", e);
+                    exit(1);
+                }
+            },
             Err(e) => {
-                eprintln!("Lexer Error : {}", e);
+                eprintln!("{}", e);
                 exit(1);
             }
         };
-        let mut parser = Parser::new(tokens);
-        let program = parser.produce_ast();
-        let result = interpreter::evaluate(program, &mut env);
         match result {
             RuntimeVal::Null => {}
             _ => println!("-> {}", result),
@@ -56,19 +71,44 @@ fn main() {
 
     let mut u_input = get_user_input();
     while u_input != "exit" {
-        let tokens = match tokenize(&u_input) {
-            Ok(t) => t,
+        let mut lexer_error: Option<LexerError> = None;
+        let mut parser_error: Option<ParserError> = None;
+        let mut interpreter_error: Option<InterpreterError> = None;
+        let result = match tokenize(&u_input) {
+            Ok(tokens) => match Parser::new(tokens).produce_ast() {
+                Ok(program) => match interpreter::evaluate(program, &mut env) {
+                    Ok(r) => Ok(r),
+                    Err(e) => {
+                        interpreter_error = Some(e);
+                        Err(())
+                    }
+                },
+                Err(e) => {
+                    parser_error = Some(e);
+                    Err(())
+                }
+            },
             Err(e) => {
-                eprintln!("Lexer Error : {}", e);
-                exit(1);
+                lexer_error = Some(e);
+                Err(())
             }
         };
-        let mut parser = Parser::new(tokens);
-        let program = parser.produce_ast();
-        let result = interpreter::evaluate(program, &mut env);
         match result {
-            RuntimeVal::Null => {}
-            _ => println!("-> {}", result),
+            Ok(r) => match r {
+                RuntimeVal::Null => {}
+                _ => println!("-> {}", r),
+            },
+            Err(_) => {
+                if let Some(e) = lexer_error {
+                    eprintln!("{}", e);
+                }
+                if let Some(e) = parser_error {
+                    eprintln!("{}", e);
+                }
+                if let Some(e) = interpreter_error {
+                    eprintln!("{}", e);
+                }
+            }
         }
 
         u_input = get_user_input();
