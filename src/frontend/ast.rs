@@ -1,6 +1,7 @@
 #[derive(Debug, Clone)]
 pub enum Expr {
     NumericLiteral(f64),
+    StringLiteral(String),
     Identifier(String),
     BinaryExpr {
         left: Box<Expr>,

@@ -4,6 +4,7 @@ use crate::frontend::errors::LexerError;
 pub enum TokenType {
     // Litral
     Number,
+    String,
     Identifier,
 
     // Keywords
@@ -134,6 +135,19 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
             }
         } else if c == '+' || c == '-' || c == '*' || c == '%' {
             tokens.push(Token::new(c.to_string(), TokenType::BinaryOperator));
+            chars.next();
+        } else if c == '"' || c == '\'' {
+            chars.next();
+            let mut s = String::new();
+            while let Some(&next_c) = chars.peek() {
+                if next_c == c {
+                    break;
+                } else {
+                    s.push(next_c);
+                }
+                chars.next();
+            }
+            tokens.push(Token::new(s, TokenType::String));
             chars.next();
         } else if c == '=' {
             tokens.push(Token::new(c.to_string(), TokenType::Equals));

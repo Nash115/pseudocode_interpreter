@@ -11,6 +11,7 @@ pub type FunctionCall = fn(Vec<RuntimeVal>, &mut Environment) -> RuntimeVal;
 pub enum RuntimeVal {
     Null,
     Number(f64),
+    String(String),
     Boolean(bool),
     Object(Rc<RefCell<HashMap<String, RuntimeVal>>>),
     NativeFn(FunctionCall),
@@ -27,6 +28,7 @@ impl std::fmt::Debug for RuntimeVal {
         match self {
             RuntimeVal::Null => write!(f, "null"),
             RuntimeVal::Number(n) => write!(f, "{}", n),
+            RuntimeVal::String(s) => write!(f, "{}", s),
             RuntimeVal::Boolean(b) => write!(f, "{}", b),
             RuntimeVal::Object(o) => write!(f, "{:?}", o),
             RuntimeVal::NativeFn(_) => write!(f, "[Native Function]"),
@@ -40,6 +42,7 @@ impl std::fmt::Display for RuntimeVal {
         match self {
             RuntimeVal::Null => write!(f, "null"),
             RuntimeVal::Number(n) => write!(f, "{}", n),
+            RuntimeVal::String(s) => write!(f, "{}", s),
             RuntimeVal::Boolean(true) => write!(f, "true"),
             RuntimeVal::Boolean(false) => write!(f, "false"),
             RuntimeVal::Object(map) => {
@@ -51,7 +54,7 @@ impl std::fmt::Display for RuntimeVal {
                 for (key, val) in borrowed.iter() {
                     entries.push(format!("{}: {}", key, val));
                 }
-                return write!(f, "{{{}}}", entries.join(","));
+                return write!(f, "{{{}}}", entries.join(", "));
             }
             RuntimeVal::NativeFn(_) => write!(f, "[Native Function]"),
             RuntimeVal::Fn { .. } => write!(f, "[Function]"),

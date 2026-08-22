@@ -59,7 +59,6 @@ affiche(resultat)
 
 ## Work In Progress
 
-- Strings
 - Lists
 - Conditions
 - Loops
@@ -116,6 +115,12 @@ print(42) // Prints 42
 a = 42
 b = 3.14
 ```
+- Strings :
+```
+s1 = "Hello,"
+s2 = ' World!'
+print(s1 + s2)
+```
 - Booleans : `true` / `false` (`vrai` / `faux`)
 ```
 b1 = true
@@ -126,6 +131,7 @@ b2 = faux
 - Object (JSON-like)
 ```
 user = {
+  name: "Alice",
   age: 42,
   subscribed: true,
   social : {

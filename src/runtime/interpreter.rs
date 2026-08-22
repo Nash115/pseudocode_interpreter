@@ -8,6 +8,7 @@ pub fn evaluate(statement: Stmt, env: &mut Environment) -> Result<RuntimeVal, In
     match statement {
         // Expr
         Stmt::ExprStmt(Expr::NumericLiteral(n)) => Ok(RuntimeVal::Number(n)),
+        Stmt::ExprStmt(Expr::StringLiteral(s)) => Ok(RuntimeVal::String(s)),
         Stmt::ExprStmt(Expr::Identifier(i)) => Ok(eval::expressions::eval_identifier(i, env)?),
         Stmt::ExprStmt(Expr::BinaryExpr {
             left,

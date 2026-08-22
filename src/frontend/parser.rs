@@ -347,6 +347,7 @@ impl Parser {
                     }
                 },
             )),
+            TokenType::String => Ok(Expr::StringLiteral(self.eat().value.clone())),
             TokenType::OpenParen => {
                 self.eat();
                 let value = self.parse_expression();

@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::format;
 use std::rc::Rc;
 
 use crate::frontend::ast::{Expr, ObjectProperty, Stmt};
@@ -48,6 +49,10 @@ pub fn eval_binary_expr(
     let lhs = interpreter::evaluate(Stmt::ExprStmt(*left), env)?;
     let rhs = interpreter::evaluate(Stmt::ExprStmt(*right), env)?;
 
+    if let (RuntimeVal::String(ls), RuntimeVal::String(rs)) = (lhs.clone(), rhs.clone()) {
+        return Ok(RuntimeVal::String(format!("{}{}", ls, rs)));
+    }
+
     let lhsv = eval_val_as_number(lhs)?;
     let rhsv = eval_val_as_number(rhs)?;
 
@@ -59,6 +64,13 @@ fn eval_val_as_boolean(e: RuntimeVal) -> bool {
         RuntimeVal::Null => false,
         RuntimeVal::Number(n) => {
             if n == 0.0 {
+                false
+            } else {
+                true
+            }
+        }
+        RuntimeVal::String(s) => {
+            if s.is_empty() {
                 false
             } else {
                 true
