@@ -59,7 +59,6 @@ affiche(resultat)
 
 ## Work In Progress
 
-- Comments
 - Strings
 - Lists
 - Conditions
@@ -91,6 +90,17 @@ endFn
 fn add(a,b)
   return a + b
 endFn
+```
+
+### Comments
+
+You can write comments using `#` or `//`
+
+Examples :
+
+```
+# My super program
+print(42) // Prints 42
 ```
 
 ### Built-in constants and functions

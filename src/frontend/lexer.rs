@@ -109,7 +109,30 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
         } else if c == ']' {
             tokens.push(Token::new(c.to_string(), TokenType::CloseBracket));
             chars.next();
-        } else if c == '+' || c == '-' || c == '*' || c == '/' || c == '%' {
+        } else if c == '#' {
+            while let Some(&next_c) = chars.peek() {
+                if next_c == '\n' {
+                    break;
+                }
+                chars.next();
+            }
+        } else if c == '/' {
+            // Handle Division and '//' Comments
+            chars.next();
+            if let Some(&'/') = chars.peek() {
+                // COMMENT
+                chars.next();
+                while let Some(&next_c) = chars.peek() {
+                    if next_c == '\n' {
+                        break;
+                    }
+                    chars.next();
+                }
+            } else {
+                // DIVISION
+                tokens.push(Token::new(c.to_string(), TokenType::BinaryOperator));
+            }
+        } else if c == '+' || c == '-' || c == '*' || c == '%' {
             tokens.push(Token::new(c.to_string(), TokenType::BinaryOperator));
             chars.next();
         } else if c == '=' {
