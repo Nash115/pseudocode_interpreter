@@ -123,10 +123,16 @@ impl std::fmt::Display for ParserError {
 #[derive(Debug)]
 pub enum InterpreterError {
     UnexpectedReturn,
+    DivBy0,
     VarAlreadyDeclared(String),
     VarUnresolvable(String),
     EditConst(String),
     UnknownBinaryOperator(String),
+    UnpermittedBinaryOperation {
+        lhs: String,
+        rhs: String,
+        operator: String,
+    },
     UnknownUnaryOperator(String),
     UnknownLogicalOperator(String),
     NumberInterpretation(RuntimeVal),
@@ -155,6 +161,9 @@ impl std::fmt::Display for InterpreterError {
             InterpreterError::UnexpectedReturn => {
                 return write!(f, "{} Unexpected return call.", prefix);
             }
+            InterpreterError::DivBy0 => {
+                return write!(f, "{} Division by 0 not permitted.", prefix);
+            }
             InterpreterError::VarAlreadyDeclared(varname) => {
                 return write!(
                     f,
@@ -177,6 +186,13 @@ impl std::fmt::Display for InterpreterError {
                     f,
                     "{} Binary operation evaluation impossible : unknown operator '{}'.",
                     prefix, operator
+                );
+            }
+            InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator } => {
+                return write!(
+                    f,
+                    "{} Binary operation '{}' not permitted between values '{}' and '{}'.",
+                    prefix, operator, lhs, rhs
                 );
             }
             InterpreterError::UnknownUnaryOperator(operator) => {

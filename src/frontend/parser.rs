@@ -56,8 +56,9 @@ impl Parser {
         match self.at().token_type {
             TokenType::Let | TokenType::Const => self.parse_var_declaration(),
             TokenType::FnStart => self.parse_fn_declaration(),
-            TokenType::If => self.parse_condition(),
             TokenType::Return => self.parse_return(),
+            TokenType::If => self.parse_condition(),
+            TokenType::While => self.parse_while_loop(),
             _ => Ok(Stmt::ExprStmt(self.parse_expression()?)),
         }
     }
@@ -173,6 +174,27 @@ impl Parser {
             test: condition,
             body,
             alternate,
+        })
+    }
+
+    fn parse_while_loop(&mut self) -> Result<Stmt, ParserError> {
+        self.eat();
+        let condition = self.parse_expression()?;
+        self.expect(
+            TokenType::Then,
+            "Missing 'then' keyword after condition expression",
+        )?;
+        let mut body: Vec<Stmt> = Vec::new();
+        while self.not_eof() && self.at().token_type != TokenType::WhileEnd {
+            body.push(self.parse_statement()?);
+        }
+        self.expect(
+            TokenType::WhileEnd,
+            "Except 'endWhile' after the while loop body",
+        )?;
+        Ok(Stmt::WhileLoop {
+            test: condition,
+            body,
         })
     }
 

@@ -81,3 +81,28 @@ pub fn eval_condition(
     }
     Ok(last_evaluated)
 }
+
+pub fn eval_while_loop(
+    test: Expr,
+    body: Vec<Stmt>,
+    env: &mut Environment,
+) -> Result<RuntimeVal, InterpreterError> {
+    let mut last_evaluated = RuntimeVal::Null;
+    while expressions::eval_val_as_boolean(interpreter::evaluate(
+        Stmt::ExprStmt(test.clone()),
+        env,
+    )?) {
+        let current_scope = env.this_scope();
+        let previous_scope = env.push_scope(Some(current_scope));
+        let body_clone = body.clone();
+        for statement in body_clone {
+            last_evaluated = interpreter::evaluate(statement, env)?;
+            if let RuntimeVal::ReturnValue(_) = last_evaluated {
+                env.pop_scope(previous_scope);
+                return Ok(last_evaluated);
+            }
+        }
+        env.pop_scope(previous_scope);
+    }
+    Ok(last_evaluated)
+}

@@ -70,5 +70,6 @@ pub fn evaluate(statement: Stmt, env: &mut Environment) -> Result<RuntimeVal, In
         } => Ok(eval::statements::eval_condition(
             test, body, alternate, env,
         )?),
+        Stmt::WhileLoop { test, body } => Ok(eval::statements::eval_while_loop(test, body, env)?),
     }
 }

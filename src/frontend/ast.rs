@@ -52,6 +52,10 @@ pub enum Stmt {
         body: Vec<Stmt>,
         alternate: Option<Vec<Stmt>>,
     },
+    WhileLoop {
+        test: Expr,
+        body: Vec<Stmt>,
+    },
     ExprStmt(Expr),
 }
 

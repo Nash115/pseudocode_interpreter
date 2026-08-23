@@ -14,6 +14,8 @@ pub enum TokenType {
     Then,
     Else,
     IfEnd,
+    While,
+    WhileEnd,
     FnStart,
     FnEnd,
     Return,
@@ -70,6 +72,11 @@ fn keyword(str: String) -> TokenType {
         "sinon" => TokenType::Else,
         "endIf" => TokenType::IfEnd,
         "finSi" => TokenType::IfEnd,
+        // Loops
+        "while" => TokenType::While,
+        "tantQue" => TokenType::While,
+        "endWhile" => TokenType::WhileEnd,
+        "finTantQue" => TokenType::WhileEnd,
         // Fn
         "fn" => TokenType::FnStart,
         "function" => TokenType::FnStart,
@@ -162,6 +169,16 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
                 chars.next();
             } else {
                 tokens.push(Token::new(c.to_string(), TokenType::UnaryOperator));
+            }
+        } else if c == '<' || c == '>' {
+            chars.next();
+            if let Some(&next_c) = chars.peek()
+                && next_c == '='
+            {
+                tokens.push(Token::new(format!("{}=", c), TokenType::LogicalOperator));
+                chars.next();
+            } else {
+                tokens.push(Token::new(c.to_string(), TokenType::LogicalOperator));
             }
         } else if c == '"' || c == '\'' {
             chars.next();

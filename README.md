@@ -60,7 +60,7 @@ affiche(resultat)
 ## Work In Progress
 
 - Lists
-- Loops
+- For Loops
 - Better errors (including lines...)
 - Better environment (Avoid Scope Accumulation : Memory Leak)
 
@@ -104,6 +104,14 @@ else if false then
 else
   print("Ok!")
 endIf
+```
+- `while`,`then`,`tantQue`,`alors` (and `endWhile`, `finTantQue`) : Used to loop on a condition
+```
+i = 0
+while i < 3 then
+  i = i + 1
+  print(i)
+endWhile
 ```
 
 ### Comments
@@ -166,9 +174,11 @@ Operators :
 Expressions :
 - `==`, `is`, `est` : Evaluates to `true` (`vrai`) if the left and the right values are equals
 - `!=` : Evaluates to `true` (`vrai`) if the left and the right values are different
+- `<` (and `<=`) : Evaluates to `true` (`vrai`) if the left value is lower (or equals, using `<=`) that the right value
+- `>` (and `>=`) : Evaluates to `true` (`vrai`) if the left value is higher (or equals, using `>=`) that the right value
 
 Example :
 ```
-not false or (false and true) == true
+not false or (false and (3 > 1)) == true
 ```
 Evaluates to `true`

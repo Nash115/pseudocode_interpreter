@@ -18,11 +18,41 @@ fn eval_numeric_binary_expr(
         "+" => lhs + rhs,
         "-" => lhs - rhs,
         "*" => lhs * rhs,
-        "/" => lhs / rhs,
+        "/" => {
+            if rhs == 0.0 {
+                return Err(InterpreterError::DivBy0);
+            } else {
+                lhs / rhs
+            }
+        }
         "%" => lhs % rhs,
         _ => return Err(InterpreterError::UnknownBinaryOperator(operator)),
     };
     Ok(RuntimeVal::Number(result))
+}
+
+fn eval_string_binary_expr(
+    lhs: String,
+    rhs: String,
+    operator: String,
+) -> Result<RuntimeVal, InterpreterError> {
+    let result: String = match operator.as_str() {
+        "+" => format!("{}{}", lhs, rhs),
+        "-" => {
+            return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
+        }
+        "*" => {
+            return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
+        }
+        "/" => {
+            return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
+        }
+        "%" => {
+            return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
+        }
+        _ => return Err(InterpreterError::UnknownBinaryOperator(operator)),
+    };
+    Ok(RuntimeVal::String(result))
 }
 
 fn eval_val_as_number(e: RuntimeVal) -> Result<f64, InterpreterError> {
@@ -51,7 +81,7 @@ pub fn eval_binary_expr(
     let rhs = interpreter::evaluate(Stmt::ExprStmt(*right), env)?;
 
     if let (RuntimeVal::String(ls), RuntimeVal::String(rs)) = (lhs.clone(), rhs.clone()) {
-        return Ok(RuntimeVal::String(format!("{}{}", ls, rs)));
+        return Ok(eval_string_binary_expr(ls, rs, operator)?);
     }
 
     let lhsv = eval_val_as_number(lhs)?;
@@ -116,6 +146,18 @@ pub fn eval_logical_expr(
         )),
         "==" => Ok(RuntimeVal::Boolean(lhs == rhs)),
         "!=" => Ok(RuntimeVal::Boolean(lhs != rhs)),
+        "<=" => Ok(RuntimeVal::Boolean(
+            eval_val_as_number(lhs)? <= eval_val_as_number(rhs)?,
+        )),
+        "<" => Ok(RuntimeVal::Boolean(
+            eval_val_as_number(lhs)? < eval_val_as_number(rhs)?,
+        )),
+        ">=" => Ok(RuntimeVal::Boolean(
+            eval_val_as_number(lhs)? >= eval_val_as_number(rhs)?,
+        )),
+        ">" => Ok(RuntimeVal::Boolean(
+            eval_val_as_number(lhs)? > eval_val_as_number(rhs)?,
+        )),
         _ => return Err(InterpreterError::UnknownLogicalOperator(operator)),
     }
 }
