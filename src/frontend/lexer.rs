@@ -10,6 +10,10 @@ pub enum TokenType {
     // Keywords
     Let,
     Const,
+    If,
+    Then,
+    Else,
+    IfEnd,
     FnStart,
     FnEnd,
     Return,
@@ -57,6 +61,15 @@ fn keyword(str: String) -> TokenType {
         // Const
         "const" => TokenType::Const,
         "constante" => TokenType::Const,
+        // If
+        "if" => TokenType::If,
+        "si" => TokenType::If,
+        "then" => TokenType::Then,
+        "alors" => TokenType::Then,
+        "else" => TokenType::Else,
+        "sinon" => TokenType::Else,
+        "endIf" => TokenType::IfEnd,
+        "finSi" => TokenType::IfEnd,
         // Fn
         "fn" => TokenType::FnStart,
         "function" => TokenType::FnStart,
@@ -74,10 +87,14 @@ fn keyword(str: String) -> TokenType {
         // Logical operators
         "not" => TokenType::UnaryOperator,
         "non" => TokenType::UnaryOperator,
+        "&&" => TokenType::LogicalOperator,
         "and" => TokenType::LogicalOperator,
         "et" => TokenType::LogicalOperator,
+        "||" => TokenType::LogicalOperator,
         "or" => TokenType::LogicalOperator,
         "ou" => TokenType::LogicalOperator,
+        "is" => TokenType::LogicalOperator,
+        "est" => TokenType::LogicalOperator,
         // Fallback
         _ => TokenType::Identifier,
     }
@@ -136,6 +153,16 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
         } else if c == '+' || c == '-' || c == '*' || c == '%' {
             tokens.push(Token::new(c.to_string(), TokenType::BinaryOperator));
             chars.next();
+        } else if c == '!' {
+            chars.next();
+            if let Some(&next_c) = chars.peek()
+                && next_c == '='
+            {
+                tokens.push(Token::new("!=".to_string(), TokenType::LogicalOperator));
+                chars.next();
+            } else {
+                tokens.push(Token::new(c.to_string(), TokenType::UnaryOperator));
+            }
         } else if c == '"' || c == '\'' {
             chars.next();
             let mut s = String::new();
@@ -150,8 +177,15 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
             tokens.push(Token::new(s, TokenType::String));
             chars.next();
         } else if c == '=' {
-            tokens.push(Token::new(c.to_string(), TokenType::Equals));
             chars.next();
+            if let Some(&next_c) = chars.peek()
+                && next_c == '='
+            {
+                tokens.push(Token::new("==".to_string(), TokenType::LogicalOperator));
+                chars.next();
+            } else {
+                tokens.push(Token::new(c.to_string(), TokenType::Equals));
+            }
         } else if c == ',' {
             tokens.push(Token::new(c.to_string(), TokenType::Comma));
             chars.next();
@@ -185,6 +219,8 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
                             "et" => "&&".to_string(),
                             "or" => "||".to_string(),
                             "ou" => "||".to_string(),
+                            "is" => "==".to_string(),
+                            "est" => "==".to_string(),
                             _ => ident,
                         },
                         t,

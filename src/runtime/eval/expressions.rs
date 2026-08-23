@@ -36,6 +36,7 @@ fn eval_val_as_number(e: RuntimeVal) -> Result<f64, InterpreterError> {
                 Ok(0.0)
             }
         }
+        RuntimeVal::ReturnValue(v) => eval_val_as_number(*v),
         v => Err(InterpreterError::NumberInterpretation(v)),
     }
 }
@@ -59,7 +60,7 @@ pub fn eval_binary_expr(
     Ok(eval_numeric_binary_expr(lhsv, rhsv, operator)?)
 }
 
-fn eval_val_as_boolean(e: RuntimeVal) -> bool {
+pub fn eval_val_as_boolean(e: RuntimeVal) -> bool {
     match e {
         RuntimeVal::Null => false,
         RuntimeVal::Number(n) => {
@@ -80,6 +81,7 @@ fn eval_val_as_boolean(e: RuntimeVal) -> bool {
         RuntimeVal::Object(_) => true,
         RuntimeVal::NativeFn(_) => true,
         RuntimeVal::Fn { .. } => true,
+        RuntimeVal::ReturnValue(v) => eval_val_as_boolean(*v),
     }
 }
 
@@ -112,6 +114,8 @@ pub fn eval_logical_expr(
         "&&" => Ok(RuntimeVal::Boolean(
             eval_val_as_boolean(lhs) && eval_val_as_boolean(rhs),
         )),
+        "==" => Ok(RuntimeVal::Boolean(lhs == rhs)),
+        "!=" => Ok(RuntimeVal::Boolean(lhs != rhs)),
         _ => return Err(InterpreterError::UnknownLogicalOperator(operator)),
     }
 }
@@ -254,15 +258,10 @@ pub fn eval_call_expr(
 
             let mut result: RuntimeVal = RuntimeVal::Null;
             for s in body {
-                match s {
-                    Stmt::Return(e) => {
-                        result = evaluate(Stmt::ExprStmt(e), env)?;
-                        env.pop_scope(previous_scope);
-                        return Ok(result);
-                    }
-                    _ => {
-                        result = evaluate(s, env)?;
-                    }
+                result = evaluate(s, env)?;
+                if let RuntimeVal::ReturnValue(val) = result {
+                    result = *val;
+                    break;
                 }
             }
 

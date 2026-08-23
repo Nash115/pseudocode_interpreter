@@ -56,6 +56,7 @@ impl Parser {
         match self.at().token_type {
             TokenType::Let | TokenType::Const => self.parse_var_declaration(),
             TokenType::FnStart => self.parse_fn_declaration(),
+            TokenType::If => self.parse_condition(),
             TokenType::Return => self.parse_return(),
             _ => Ok(Stmt::ExprStmt(self.parse_expression()?)),
         }
@@ -129,6 +130,50 @@ impl Parser {
         };
 
         Ok(declaration)
+    }
+
+    fn parse_condition(&mut self) -> Result<Stmt, ParserError> {
+        self.eat();
+        let stmt = self.parse_condition_internal()?;
+        self.expect(TokenType::IfEnd, "Except 'endIf' after the condition body")?;
+        Ok(stmt)
+    }
+
+    fn parse_condition_internal(&mut self) -> Result<Stmt, ParserError> {
+        let condition = self.parse_expression()?;
+        self.expect(
+            TokenType::Then,
+            "Missing 'then' keyword after condition expression",
+        )?;
+        let mut body: Vec<Stmt> = Vec::new();
+        while self.not_eof()
+            && self.at().token_type != TokenType::IfEnd
+            && self.at().token_type != TokenType::Else
+        {
+            body.push(self.parse_statement()?);
+        }
+
+        let mut alternate: Option<Vec<Stmt>> = None;
+        if self.at().token_type == TokenType::Else {
+            self.eat();
+            if self.at().token_type == TokenType::If {
+                self.eat();
+                let else_if_stmt = self.parse_condition_internal()?;
+                alternate = Some(vec![else_if_stmt]);
+            } else {
+                let mut alt_body = Vec::new();
+                while self.not_eof() && self.at().token_type != TokenType::IfEnd {
+                    alt_body.push(self.parse_statement()?);
+                }
+                alternate = Some(alt_body);
+            }
+        }
+
+        Ok(Stmt::Condition {
+            test: condition,
+            body,
+            alternate,
+        })
     }
 
     fn parse_expression(&mut self) -> Result<Expr, ParserError> {

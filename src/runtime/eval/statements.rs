@@ -1,6 +1,7 @@
 use crate::frontend::ast::{Expr, Stmt};
 use crate::frontend::errors::InterpreterError;
 use crate::runtime::environment::Environment;
+use crate::runtime::eval::expressions;
 use crate::runtime::interpreter;
 use crate::runtime::values::RuntimeVal;
 
@@ -11,6 +12,9 @@ pub fn eval_program(
     let mut last_evaluated = RuntimeVal::Null;
     for statement in body {
         last_evaluated = interpreter::evaluate(statement, env)?;
+        if let RuntimeVal::ReturnValue(_) = last_evaluated {
+            return Err(InterpreterError::UnexpectedReturn);
+        }
     }
     Ok(last_evaluated)
 }
@@ -42,4 +46,38 @@ pub fn eval_fn_declaration(
     };
 
     Ok(env.declare_var(name, f, true)?)
+}
+
+pub fn eval_condition(
+    test: Expr,
+    body: Vec<Stmt>,
+    alternate: Option<Vec<Stmt>>,
+    env: &mut Environment,
+) -> Result<RuntimeVal, InterpreterError> {
+    let mut last_evaluated = RuntimeVal::Null;
+    let test_val = interpreter::evaluate(Stmt::ExprStmt(test), env)?;
+    if expressions::eval_val_as_boolean(test_val) {
+        let current_scope = env.this_scope();
+        let previous_scope = env.push_scope(Some(current_scope));
+        for statement in body {
+            last_evaluated = interpreter::evaluate(statement, env)?;
+            if let RuntimeVal::ReturnValue(_) = last_evaluated {
+                env.pop_scope(previous_scope);
+                return Ok(last_evaluated);
+            }
+        }
+        env.pop_scope(previous_scope);
+    } else if let Some(alt) = alternate {
+        let current_scope = env.this_scope();
+        let previous_scope = env.push_scope(Some(current_scope));
+        for statement in alt {
+            last_evaluated = interpreter::evaluate(statement, env)?;
+            if let RuntimeVal::ReturnValue(_) = last_evaluated {
+                env.pop_scope(previous_scope);
+                return Ok(last_evaluated);
+            }
+        }
+        env.pop_scope(previous_scope);
+    }
+    Ok(last_evaluated)
 }

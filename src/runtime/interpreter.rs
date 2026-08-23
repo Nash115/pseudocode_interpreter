@@ -59,6 +59,16 @@ pub fn evaluate(statement: Stmt, env: &mut Environment) -> Result<RuntimeVal, In
         } => Ok(eval::statements::eval_fn_declaration(
             name, parameters, body, env,
         )?),
-        Stmt::Return(_) => Err(InterpreterError::UnexpectedReturn),
+        Stmt::Return(e) => {
+            let val = evaluate(Stmt::ExprStmt(e), env)?;
+            Ok(RuntimeVal::ReturnValue(Box::new(val)))
+        }
+        Stmt::Condition {
+            test,
+            body,
+            alternate,
+        } => Ok(eval::statements::eval_condition(
+            test, body, alternate, env,
+        )?),
     }
 }

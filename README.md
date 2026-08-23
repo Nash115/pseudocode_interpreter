@@ -60,7 +60,6 @@ affiche(resultat)
 ## Work In Progress
 
 - Lists
-- Conditions
 - Loops
 - Better errors (including lines...)
 - Better environment (Avoid Scope Accumulation : Memory Leak)
@@ -89,6 +88,22 @@ endFn
 fn add(a,b)
   return a + b
 endFn
+```
+- `if`,`then`,`else`,`si`,`alors`,`sinon` (and `endIf`, `finSi`) : Used to check conditions
+```
+if 1+1 == 2 then
+  print("1+1 = 2")
+endIf
+
+if 1 is 2 then
+  print("Math error")
+else if false and (true or false) then
+  print("Logical error")
+else if false then
+  print("Another error")
+else
+  print("Ok!")
+endIf
 ```
 
 ### Comments
@@ -141,15 +156,19 @@ user = {
 }
 ```
 
-### Logical operations
+### Logical expressions
 
 Operators :
-- `not`, `non` : Get the opposite of a boolean
+- `!`, `not`, `non` : Get the opposite of a boolean
 - `and`, `et` : Evaluates to `true` (`vrai`) if the left AND the right values are (or evaluates to) `true`
 - `or`, `ou` : Evaluates to `true` (`vrai`) if the left OR the right value is (or evaluate to) `true`
 
+Expressions :
+- `==`, `is`, `est` : Evaluates to `true` (`vrai`) if the left and the right values are equals
+- `!=` : Evaluates to `true` (`vrai`) if the left and the right values are different
+
 Example :
 ```
-not false and (false or true)
+not false or (false and true) == true
 ```
 Evaluates to `true`

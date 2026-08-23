@@ -1,4 +1,4 @@
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     NumericLiteral(f64),
     StringLiteral(String),
@@ -33,7 +33,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Program(Vec<Stmt>),
     VarDeclaration {
@@ -47,10 +47,15 @@ pub enum Stmt {
         body: Vec<Stmt>,
     },
     Return(Expr),
+    Condition {
+        test: Expr,
+        body: Vec<Stmt>,
+        alternate: Option<Vec<Stmt>>,
+    },
     ExprStmt(Expr),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ObjectProperty {
     pub key: String,
     pub value: Option<Expr>,
