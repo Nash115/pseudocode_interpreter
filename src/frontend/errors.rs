@@ -139,10 +139,12 @@ pub enum InterpreterError {
     Assignment(Expr),
     ObjectKeyUncomputedNotIdentifier(Expr),
     ObjectKeyComputedType(RuntimeVal),
-    NotAnObject {
+    MemberNotAccessible {
         action: String,
         value: RuntimeVal,
     },
+    InvalidIndex(String),
+    OutOfBounds(i64),
     NotAFunction {
         action: String,
         value: RuntimeVal,
@@ -151,6 +153,12 @@ pub enum InterpreterError {
         name: String,
         expected: usize,
         given: usize,
+    },
+    NativeFunctionWrongArgument {
+        name: String,
+        index: usize,
+        expected: String,
+        given: String,
     },
 }
 impl std::error::Error for InterpreterError {}
@@ -229,12 +237,18 @@ impl std::fmt::Display for InterpreterError {
             InterpreterError::ObjectKeyComputedType(v) => {
                 return write!(f, "{} Invalid type for object key : {:?}", prefix, v);
             }
-            InterpreterError::NotAnObject { action, value } => {
+            InterpreterError::MemberNotAccessible { action, value } => {
                 return write!(
                     f,
-                    "{} {} error : {} is not an object.",
+                    "{} {} error : Cannot access a member of {}. Member access only available for objects / lists.",
                     prefix, action, value
                 );
+            }
+            InterpreterError::InvalidIndex(i) => {
+                return write!(f, "{} '{}' cannot be interpreted as an index", prefix, i);
+            }
+            InterpreterError::OutOfBounds(i) => {
+                return write!(f, "{} Index '{}' is out of bounds.", prefix, i);
             }
             InterpreterError::NotAFunction { action, value } => {
                 return write!(
@@ -252,6 +266,18 @@ impl std::fmt::Display for InterpreterError {
                     f,
                     "{} Function call error : {} requires {} arguments, but {} were given.",
                     prefix, name, expected, given
+                );
+            }
+            InterpreterError::NativeFunctionWrongArgument {
+                name,
+                index,
+                expected,
+                given,
+            } => {
+                return write!(
+                    f,
+                    "{} Native function call error : {} requires a {} as argument number {}, but recived {}",
+                    prefix, name, expected, index, given
                 );
             }
         }

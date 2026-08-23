@@ -59,7 +59,6 @@ affiche(resultat)
 
 ## Work In Progress
 
-- Lists
 - For Loops
 - Better errors (including lines...)
 - Better environment (Avoid Scope Accumulation : Memory Leak)
@@ -128,8 +127,21 @@ print(42) // Prints 42
 ### Built-in constants and functions
 
 - `PI` : CONST with an f64 value of π
-- `print(...)`, `affiche(...)` : FUNCTION that prints every parameter, separated by spaces.
-- `time()`, `temps()` : FUNCTION that returns the time since the EPOCH.
+- `print(...)` (also `affiche`) : FUNCTION that prints every parameter, separated by spaces.
+- `time()` (also `temps`) : FUNCTION that returns the time since the EPOCH.
+
+- `len(x)` (also `taille`) : FUNCTION that returns the "size" of x. If x is a :
+  - String : The size of the string (counting the chars)
+  - Object : The number of (kee, value) pairs
+  - List : The number of items in the list
+- `push(list, value)` (also `append`, `empiler`) : FUNCTION that push the `value` at the end of the `list`.
+- `pop(list)`, `pop(list,index)` (also `depiler`) : FUNCTION that pop an item of the `list` :
+  - If provided, pops the item at the `index`
+  - Otherwise, pops the last item
+- `range(b)`, `range(a,b)`, `range(a,b,step)` (also `plage`) : FUNCTION that returns a list of integers:
+  - if only `b` provided : from `0` (included) to `b` (excluded)
+  - if `a` and `b` provided : from `a` (included) to `b` (excluded)
+  - if `a`, `b` and `step` provided : from `a` (included) to `b` (excluded) with a `step` between each values
 
 ### Variable types
 
@@ -162,6 +174,14 @@ user = {
     friends: 10
   }
 }
+```
+- List
+```
+list = [1, "Hi", true]
+list[1] = "Hello"
+push(list, PI)
+pop(list, 0)
+print(list) // [Hello, true, 3.141592653589793]
 ```
 
 ### Logical expressions

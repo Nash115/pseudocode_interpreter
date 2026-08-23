@@ -243,7 +243,33 @@ impl Parser {
             });
         }
 
-        self.parse_object_expr()
+        self.parse_list_expr()
+    }
+
+    fn parse_list_expr(&mut self) -> Result<Expr, ParserError> {
+        if self.at().token_type != TokenType::OpenBracket {
+            return self.parse_object_expr();
+        }
+
+        self.eat();
+        let mut list: Vec<Expr> = Vec::new();
+
+        while self.not_eof() && self.at().token_type != TokenType::CloseBracket {
+            let value = self.parse_expression()?;
+
+            list.push(value);
+
+            if self.at().token_type != TokenType::CloseBracket {
+                self.expect(
+                    TokenType::Comma,
+                    "Expecting ',' or ']' following list value",
+                )?;
+            }
+        }
+
+        self.expect(TokenType::CloseBracket, "List litteral missing ']'")?;
+
+        Ok(Expr::ListLiteral(list))
     }
 
     fn parse_object_expr(&mut self) -> Result<Expr, ParserError> {

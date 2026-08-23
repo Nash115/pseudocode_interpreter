@@ -18,6 +18,7 @@ pub enum Expr {
         operator: String,
     },
     ObjectLiteral(Vec<ObjectProperty>),
+    ListLiteral(Vec<Expr>),
     AssignmentExpr {
         assigne: Box<Expr>,
         value: Box<Expr>,

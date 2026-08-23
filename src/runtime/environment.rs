@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::frontend::errors::InterpreterError;
+use crate::runtime::default_env;
 use crate::runtime::values::RuntimeVal;
 
 pub struct Scope {
@@ -25,47 +26,13 @@ impl Environment {
         };
 
         // Define natives variables
-        env.declare_var(
-            String::from("PI"),
-            RuntimeVal::Number(3.14159265358979323846264338327950288),
-            true,
-        )?;
-        env.declare_var(String::from("true"), RuntimeVal::Boolean(true), true)?;
-        env.declare_var(String::from("false"), RuntimeVal::Boolean(false), true)?;
-        env.declare_var(String::from("null"), RuntimeVal::Null, true)?;
+        default_env::load_default_variables(&mut env)?;
 
         // Define natives functions
-        env.declare_var(
-            String::from("print"),
-            RuntimeVal::NativeFn(|_args, _scope| {
-                let mut i: usize = 0;
-                for v in _args.clone() {
-                    i += 1;
-                    let space = if i == _args.len() { "" } else { " " };
-                    print!("{}{}", v, space);
-                }
-                println!("");
-                return RuntimeVal::Null;
-            }),
-            true,
-        )?;
-        env.declare_var(
-            String::from("time"),
-            RuntimeVal::NativeFn(|_args, _env| {
-                use std::time::{SystemTime, UNIX_EPOCH};
-                let start = SystemTime::now();
-                let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
-                RuntimeVal::Number(since_the_epoch.as_millis() as f64)
-            }),
-            true,
-        )?;
+        default_env::load_default_functions(&mut env)?;
 
         // Define aliases (natives variables and functions)
-        env.alias("true", "vrai")?;
-        env.alias("false", "faux")?;
-        env.alias("null", "nul")?;
-        env.alias("print", "affiche")?;
-        env.alias("time", "temps")?;
+        default_env::load_default_aliases(&mut env)?;
 
         Ok(env)
     }
@@ -147,7 +114,7 @@ impl Environment {
         self.declare_var(varname, value, false)
     }
 
-    fn alias(&mut self, varname: &str, alias: &str) -> Result<RuntimeVal, InterpreterError> {
+    pub fn alias(&mut self, varname: &str, alias: &str) -> Result<RuntimeVal, InterpreterError> {
         let source_value = self.lookup_var(varname)?;
         Ok(self.assign_var(String::from(alias), source_value)?)
     }

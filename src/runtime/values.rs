@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::frontend::ast::Stmt;
+use crate::frontend::errors::InterpreterError;
 use crate::runtime::environment::Environment;
 
-pub type FunctionCall = fn(Vec<RuntimeVal>, &mut Environment) -> RuntimeVal;
+pub type FunctionCall =
+    fn(Vec<RuntimeVal>, &mut Environment) -> Result<RuntimeVal, InterpreterError>;
 
 #[derive(Clone)]
 pub enum RuntimeVal {
@@ -14,6 +16,7 @@ pub enum RuntimeVal {
     String(String),
     Boolean(bool),
     Object(Rc<RefCell<HashMap<String, RuntimeVal>>>),
+    List(Rc<RefCell<Vec<RuntimeVal>>>),
     NativeFn(FunctionCall),
     Fn {
         name: String,
@@ -69,6 +72,7 @@ impl std::fmt::Debug for RuntimeVal {
             RuntimeVal::String(s) => write!(f, "{}", s),
             RuntimeVal::Boolean(b) => write!(f, "{}", b),
             RuntimeVal::Object(o) => write!(f, "{:?}", o),
+            RuntimeVal::List(v) => write!(f, "{:?}", v),
             RuntimeVal::NativeFn(_) => write!(f, "[Native Function]"),
             RuntimeVal::Fn { .. } => write!(f, "[Function]"),
             RuntimeVal::ReturnValue(v) => write!(f, "{:?}", v),
@@ -94,6 +98,14 @@ impl std::fmt::Display for RuntimeVal {
                     entries.push(format!("{}: {}", key, val));
                 }
                 return write!(f, "{{{}}}", entries.join(", "));
+            }
+            RuntimeVal::List(v) => {
+                let borrowed = v.borrow();
+                let mut tab: Vec<String> = Vec::new();
+                for val in borrowed.iter() {
+                    tab.push(format!("{}", val));
+                }
+                write!(f, "[{}]", tab.join(", "))
             }
             RuntimeVal::NativeFn(_) => write!(f, "[Native Function]"),
             RuntimeVal::Fn { .. } => write!(f, "[Function]"),

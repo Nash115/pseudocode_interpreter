@@ -30,6 +30,9 @@ pub fn evaluate(statement: Stmt, env: &mut Environment) -> Result<RuntimeVal, In
         Stmt::ExprStmt(Expr::ObjectLiteral(properties)) => {
             Ok(eval::expressions::eval_object_expr(properties, env)?)
         }
+        Stmt::ExprStmt(Expr::ListLiteral(values)) => {
+            Ok(eval::expressions::eval_list_expr(values, env)?)
+        }
         Stmt::ExprStmt(Expr::AssignmentExpr { assigne, value }) => {
             Ok(eval::expressions::eval_assignment(assigne, value, env)?)
         }

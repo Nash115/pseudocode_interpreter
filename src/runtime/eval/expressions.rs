@@ -1,12 +1,11 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::format;
 use std::rc::Rc;
 
 use crate::frontend::ast::{Expr, ObjectProperty, Stmt};
 use crate::frontend::errors::InterpreterError;
 use crate::runtime::environment::Environment;
-use crate::runtime::interpreter::{self, evaluate};
+use crate::runtime::interpreter::evaluate;
 use crate::runtime::values::RuntimeVal::{self, Object};
 
 fn eval_numeric_binary_expr(
@@ -77,8 +76,8 @@ pub fn eval_binary_expr(
     operator: String,
     env: &mut Environment,
 ) -> Result<RuntimeVal, InterpreterError> {
-    let lhs = interpreter::evaluate(Stmt::ExprStmt(*left), env)?;
-    let rhs = interpreter::evaluate(Stmt::ExprStmt(*right), env)?;
+    let lhs = evaluate(Stmt::ExprStmt(*left), env)?;
+    let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
 
     if let (RuntimeVal::String(ls), RuntimeVal::String(rs)) = (lhs.clone(), rhs.clone()) {
         return Ok(eval_string_binary_expr(ls, rs, operator)?);
@@ -93,22 +92,17 @@ pub fn eval_binary_expr(
 pub fn eval_val_as_boolean(e: RuntimeVal) -> bool {
     match e {
         RuntimeVal::Null => false,
-        RuntimeVal::Number(n) => {
-            if n == 0.0 {
-                false
-            } else {
-                true
-            }
-        }
-        RuntimeVal::String(s) => {
-            if s.is_empty() {
-                false
-            } else {
-                true
-            }
-        }
+        RuntimeVal::Number(n) => !(n == 0.0),
+        RuntimeVal::String(s) => !s.is_empty(),
         RuntimeVal::Boolean(b) => b,
-        RuntimeVal::Object(_) => true,
+        RuntimeVal::Object(map) => {
+            let borrowed = map.borrow();
+            !borrowed.is_empty()
+        }
+        RuntimeVal::List(v) => {
+            let borrowed = v.borrow();
+            !borrowed.is_empty()
+        }
         RuntimeVal::NativeFn(_) => true,
         RuntimeVal::Fn { .. } => true,
         RuntimeVal::ReturnValue(v) => eval_val_as_boolean(*v),
@@ -120,7 +114,7 @@ pub fn eval_unary_expr(
     operator: String,
     env: &mut Environment,
 ) -> Result<RuntimeVal, InterpreterError> {
-    let rhs = interpreter::evaluate(Stmt::ExprStmt(*right), env)?;
+    let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
 
     match operator.as_str() {
         "!" => Ok(RuntimeVal::Boolean(!eval_val_as_boolean(rhs))),
@@ -134,8 +128,8 @@ pub fn eval_logical_expr(
     operator: String,
     env: &mut Environment,
 ) -> Result<RuntimeVal, InterpreterError> {
-    let lhs = interpreter::evaluate(Stmt::ExprStmt(*left), env)?;
-    let rhs = interpreter::evaluate(Stmt::ExprStmt(*right), env)?;
+    let lhs = evaluate(Stmt::ExprStmt(*left), env)?;
+    let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
 
     match operator.as_str() {
         "||" => Ok(RuntimeVal::Boolean(
@@ -176,7 +170,7 @@ pub fn eval_assignment(
 ) -> Result<RuntimeVal, InterpreterError> {
     match *assigne {
         Expr::Identifier(i) => {
-            let v = interpreter::evaluate(Stmt::ExprStmt((*value).clone()), env)?;
+            let v = evaluate(Stmt::ExprStmt((*value).clone()), env)?;
             env.assign_var(i, v)
         }
         Expr::MemberExpr {
@@ -191,8 +185,30 @@ pub fn eval_assignment(
                 let val = evaluate(Stmt::ExprStmt((*value).clone()), env)?;
                 map.borrow_mut().insert(key, val.clone());
                 return Ok(val);
+            } else if let RuntimeVal::List(v) = obj {
+                let key = get_member_key(&property, computed, env)?;
+                let val = evaluate(Stmt::ExprStmt((*value).clone()), env)?;
+                let index: i64 = match key.parse() {
+                    Ok(v) => v,
+                    Err(_) => {
+                        return Err(InterpreterError::InvalidIndex(key));
+                    }
+                };
+                let mut borrowed = v.borrow_mut();
+                if index < -(borrowed.len() as i64) {
+                    return Err(InterpreterError::OutOfBounds(index));
+                }
+                let mut uindex = index as usize;
+                if index < 0 {
+                    uindex = borrowed.len() - ((-1 * index) as usize);
+                }
+                if uindex >= borrowed.len() {
+                    return Err(InterpreterError::OutOfBounds(index));
+                }
+                borrowed[uindex] = val.clone();
+                return Ok(val);
             } else {
-                return Err(InterpreterError::NotAnObject {
+                return Err(InterpreterError::MemberNotAccessible {
                     action: String::from("Assignment"),
                     value: obj,
                 });
@@ -223,6 +239,20 @@ pub fn eval_object_expr(
     }
 
     Ok(Object(Rc::new(RefCell::new(object_properties))))
+}
+
+pub fn eval_list_expr(
+    values: Vec<Expr>,
+    env: &mut Environment,
+) -> Result<RuntimeVal, InterpreterError> {
+    let mut list_values = Vec::new();
+
+    for value in values {
+        let runtime_val = evaluate(Stmt::ExprStmt(value), env)?;
+        list_values.push(runtime_val);
+    }
+
+    Ok(RuntimeVal::List(Rc::new(RefCell::new(list_values))))
 }
 
 fn get_member_key(
@@ -258,7 +288,28 @@ pub fn eval_member_expr(
             let key = get_member_key(&property, computed, env)?;
             Ok(map.borrow().get(&key).cloned().unwrap_or(RuntimeVal::Null))
         }
-        _ => Err(InterpreterError::NotAnObject {
+        RuntimeVal::List(v) => {
+            let key = get_member_key(&property, computed, env)?;
+            let index: i64 = match key.parse() {
+                Ok(v) => v,
+                Err(_) => {
+                    return Err(InterpreterError::InvalidIndex(key));
+                }
+            };
+            let borrowed = v.borrow_mut();
+            if index < -(borrowed.len() as i64) {
+                return Err(InterpreterError::OutOfBounds(index));
+            }
+            let mut uindex = index as usize;
+            if index < 0 {
+                uindex = borrowed.len() - ((-1 * index) as usize);
+            }
+            if uindex >= borrowed.len() {
+                return Err(InterpreterError::OutOfBounds(index));
+            }
+            return Ok(borrowed[uindex].clone());
+        }
+        _ => Err(InterpreterError::MemberNotAccessible {
             action: String::from("Key access"),
             value: obj,
         }),
@@ -276,7 +327,7 @@ pub fn eval_call_expr(
     }
     let f = evaluate(Stmt::ExprStmt(*caller), env)?;
     match f {
-        RuntimeVal::NativeFn(call) => Ok(call(evaluated_args, env)),
+        RuntimeVal::NativeFn(call) => Ok(call(evaluated_args, env)?),
         RuntimeVal::Fn {
             name,
             parameters,
