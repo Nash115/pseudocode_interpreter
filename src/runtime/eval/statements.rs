@@ -2,7 +2,7 @@ use crate::frontend::ast::{Expr, Stmt};
 use crate::frontend::errors::InterpreterError;
 use crate::runtime::environment::Environment;
 use crate::runtime::eval::expressions;
-use crate::runtime::interpreter;
+use crate::runtime::interpreter::evaluate;
 use crate::runtime::values::RuntimeVal;
 
 pub fn eval_program(
@@ -11,7 +11,7 @@ pub fn eval_program(
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut last_evaluated = RuntimeVal::Null;
     for statement in body {
-        last_evaluated = interpreter::evaluate(statement, env)?;
+        last_evaluated = evaluate(statement, env)?;
         if let RuntimeVal::ReturnValue(_) = last_evaluated {
             return Err(InterpreterError::UnexpectedReturn);
         }
@@ -26,7 +26,7 @@ pub fn eval_var_declaration(
     env: &mut Environment,
 ) -> Result<RuntimeVal, InterpreterError> {
     let val = match value {
-        Some(v) => interpreter::evaluate(Stmt::ExprStmt(v), env)?,
+        Some(v) => evaluate(Stmt::ExprStmt(v), env)?,
         None => RuntimeVal::Null,
     };
     Ok(env.declare_var(identifier, val, constant)?)
@@ -55,12 +55,12 @@ pub fn eval_condition(
     env: &mut Environment,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut last_evaluated = RuntimeVal::Null;
-    let test_val = interpreter::evaluate(Stmt::ExprStmt(test), env)?;
+    let test_val = evaluate(Stmt::ExprStmt(test), env)?;
     if expressions::eval_val_as_boolean(test_val) {
         let current_scope = env.this_scope();
         let previous_scope = env.push_scope(Some(current_scope));
         for statement in body {
-            last_evaluated = interpreter::evaluate(statement, env)?;
+            last_evaluated = evaluate(statement, env)?;
             if let RuntimeVal::ReturnValue(_) = last_evaluated {
                 env.pop_scope(previous_scope);
                 return Ok(last_evaluated);
@@ -71,7 +71,7 @@ pub fn eval_condition(
         let current_scope = env.this_scope();
         let previous_scope = env.push_scope(Some(current_scope));
         for statement in alt {
-            last_evaluated = interpreter::evaluate(statement, env)?;
+            last_evaluated = evaluate(statement, env)?;
             if let RuntimeVal::ReturnValue(_) = last_evaluated {
                 env.pop_scope(previous_scope);
                 return Ok(last_evaluated);
@@ -88,21 +88,78 @@ pub fn eval_while_loop(
     env: &mut Environment,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut last_evaluated = RuntimeVal::Null;
-    while expressions::eval_val_as_boolean(interpreter::evaluate(
-        Stmt::ExprStmt(test.clone()),
-        env,
-    )?) {
+    while expressions::eval_val_as_boolean(evaluate(Stmt::ExprStmt(test.clone()), env)?) {
         let current_scope = env.this_scope();
         let previous_scope = env.push_scope(Some(current_scope));
         let body_clone = body.clone();
         for statement in body_clone {
-            last_evaluated = interpreter::evaluate(statement, env)?;
+            last_evaluated = evaluate(statement, env)?;
             if let RuntimeVal::ReturnValue(_) = last_evaluated {
                 env.pop_scope(previous_scope);
                 return Ok(last_evaluated);
             }
         }
         env.pop_scope(previous_scope);
+    }
+    Ok(last_evaluated)
+}
+
+pub fn eval_for_loop(
+    iterable: Expr,
+    identifier: String,
+    body: Vec<Stmt>,
+    env: &mut Environment,
+) -> Result<RuntimeVal, InterpreterError> {
+    let mut last_evaluated = RuntimeVal::Null;
+    let mut i = 0;
+
+    let parsed_iterable = evaluate(Stmt::ExprStmt(iterable), env)?;
+    let iterable_size: usize = match parsed_iterable.clone() {
+        RuntimeVal::List(v) => v.borrow().len(),
+        RuntimeVal::Object(o) => o.borrow().len(),
+        RuntimeVal::String(s) => s.chars().count(),
+        v => return Err(InterpreterError::NotIterable(format!("{}", v))),
+    };
+
+    while i < iterable_size {
+        let current_scope = env.this_scope();
+        let previous_scope = env.push_scope(Some(current_scope));
+
+        env.assign_var(
+            identifier.clone(),
+            match parsed_iterable.clone() {
+                RuntimeVal::List(v) => {
+                    let b = v.borrow();
+                    b[i].clone()
+                }
+                RuntimeVal::Object(o) => {
+                    let b = o.borrow();
+                    let mut keys: Vec<String> = b.clone().into_keys().collect();
+                    keys.sort();
+                    RuntimeVal::String(keys[i].clone())
+                }
+                RuntimeVal::String(s) => RuntimeVal::String(format!(
+                    "{}",
+                    match s.chars().nth(i) {
+                        Some(c) => c,
+                        None => 'c',
+                    }
+                )),
+                _ => RuntimeVal::Null,
+            },
+        )?;
+
+        let body_clone = body.clone();
+        for statement in body_clone {
+            last_evaluated = evaluate(statement, env)?;
+            if let RuntimeVal::ReturnValue(_) = last_evaluated {
+                env.pop_scope(previous_scope);
+                return Ok(last_evaluated);
+            }
+        }
+        env.pop_scope(previous_scope);
+
+        i += 1;
     }
     Ok(last_evaluated)
 }

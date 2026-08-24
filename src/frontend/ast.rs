@@ -57,6 +57,11 @@ pub enum Stmt {
         test: Expr,
         body: Vec<Stmt>,
     },
+    ForLoop {
+        iterable: Expr,
+        identifier: String,
+        body: Vec<Stmt>,
+    },
     ExprStmt(Expr),
 }
 

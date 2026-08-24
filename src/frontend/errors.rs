@@ -160,6 +160,7 @@ pub enum InterpreterError {
         expected: String,
         given: String,
     },
+    NotIterable(String),
 }
 impl std::error::Error for InterpreterError {}
 impl std::fmt::Display for InterpreterError {
@@ -278,6 +279,13 @@ impl std::fmt::Display for InterpreterError {
                     f,
                     "{} Native function call error : {} requires a {} as argument number {}, but recived {}",
                     prefix, name, expected, index, given
+                );
+            }
+            InterpreterError::NotIterable(s) => {
+                return write!(
+                    f,
+                    "{} Iteration impossible : {} is not iterable.",
+                    prefix, s
                 );
             }
         }

@@ -59,7 +59,6 @@ affiche(resultat)
 
 ## Work In Progress
 
-- For Loops
 - Better errors (including lines...)
 - Better environment (Avoid Scope Accumulation : Memory Leak)
 
@@ -111,6 +110,25 @@ while i < 3 then
   i = i + 1
   print(i)
 endWhile
+```
+- `for`, `in`, `pour`, `dans` (and `endFor`, `finPour`) : Used to loop on an iterable
+```
+for i in range(10)
+  print(i)
+endFor
+
+for c in "Hello"
+  print(c)
+endFor
+
+for e in [1,2,3]
+  print(e)
+endFor
+
+let obj = {a: 1, b:2}
+for k in obj
+  print(k, obj[k])
+endFor
 ```
 
 ### Comments

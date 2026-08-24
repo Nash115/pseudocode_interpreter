@@ -37,21 +37,40 @@ fn eval_string_binary_expr(
 ) -> Result<RuntimeVal, InterpreterError> {
     let result: String = match operator.as_str() {
         "+" => format!("{}{}", lhs, rhs),
-        "-" => {
-            return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
-        }
-        "*" => {
-            return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
-        }
-        "/" => {
-            return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
-        }
-        "%" => {
+        "-" | "*" | "/" | "%" => {
             return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
         }
         _ => return Err(InterpreterError::UnknownBinaryOperator(operator)),
     };
     Ok(RuntimeVal::String(result))
+}
+
+fn eval_list_binary_expr(
+    lhs: Vec<RuntimeVal>,
+    rhs: Vec<RuntimeVal>,
+    operator: String,
+) -> Result<RuntimeVal, InterpreterError> {
+    let result: Vec<RuntimeVal> = match operator.as_str() {
+        "+" => {
+            let mut t = Vec::new();
+            for v in lhs.clone() {
+                t.push(v);
+            }
+            for v in rhs {
+                t.push(v);
+            }
+            t
+        }
+        "-" | "*" | "/" | "%" => {
+            return Err(InterpreterError::UnpermittedBinaryOperation {
+                lhs: format!("{:?}", lhs),
+                rhs: format!("{:?}", rhs),
+                operator,
+            });
+        }
+        _ => return Err(InterpreterError::UnknownBinaryOperator(operator)),
+    };
+    Ok(RuntimeVal::List(Rc::new(RefCell::new(result))))
 }
 
 fn eval_val_as_number(e: RuntimeVal) -> Result<f64, InterpreterError> {
@@ -81,6 +100,11 @@ pub fn eval_binary_expr(
 
     if let (RuntimeVal::String(ls), RuntimeVal::String(rs)) = (lhs.clone(), rhs.clone()) {
         return Ok(eval_string_binary_expr(ls, rs, operator)?);
+    }
+    if let (RuntimeVal::List(ls), RuntimeVal::List(rs)) = (lhs.clone(), rhs.clone()) {
+        let ll = ls.borrow().clone();
+        let rl = rs.borrow().clone();
+        return Ok(eval_list_binary_expr(ll, rl, operator)?);
     }
 
     let lhsv = eval_val_as_number(lhs)?;
@@ -271,6 +295,7 @@ fn get_member_key(
         let evaluated_prop = evaluate(Stmt::ExprStmt(property.clone()), env)?;
         match evaluated_prop {
             RuntimeVal::Number(n) => Ok(n.to_string()),
+            RuntimeVal::String(s) => Ok(s),
             v => Err(InterpreterError::ObjectKeyComputedType(v)),
         }
     }
