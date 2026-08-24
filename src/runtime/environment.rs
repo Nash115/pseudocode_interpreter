@@ -1,60 +1,34 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use crate::frontend::errors::InterpreterError;
 use crate::runtime::default_env;
 use crate::runtime::values::RuntimeVal;
 
-pub struct Scope {
+#[derive(PartialEq)]
+pub struct Environment {
     pub variables: HashMap<String, RuntimeVal>,
     pub constants: HashSet<String>,
-    pub parent_idx: Option<usize>,
-}
-
-pub struct Environment {
-    pub scopes: Vec<Scope>,
-    pub current_scope: usize,
+    pub parent: Option<Rc<RefCell<Environment>>>,
 }
 impl Environment {
-    pub fn new() -> Result<Self, InterpreterError> {
-        let mut env = Environment {
-            scopes: vec![Scope {
-                variables: HashMap::new(),
-                constants: HashSet::new(),
-                parent_idx: None,
-            }],
-            current_scope: 0,
-        };
-
-        // Define natives variables
-        default_env::load_default_variables(&mut env)?;
-
-        // Define natives functions
-        default_env::load_default_functions(&mut env)?;
-
-        // Define aliases (natives variables and functions)
-        default_env::load_default_aliases(&mut env)?;
-
-        Ok(env)
-    }
-
-    pub fn push_scope(&mut self, parent_idx: Option<usize>) -> usize {
-        let new_idx = self.scopes.len();
-        self.scopes.push(Scope {
+    pub fn new(parent: Option<Rc<RefCell<Environment>>>) -> Self {
+        Environment {
             variables: HashMap::new(),
             constants: HashSet::new(),
-            parent_idx,
-        });
-        let previous = self.current_scope;
-        self.current_scope = new_idx;
-        previous
+            parent,
+        }
     }
 
-    pub fn pop_scope(&mut self, previous_scope: usize) {
-        self.current_scope = previous_scope;
-    }
+    pub fn create_global() -> Result<Rc<RefCell<Self>>, InterpreterError> {
+        let env = Rc::new(RefCell::new(Environment::new(None)));
 
-    pub fn this_scope(&mut self) -> usize {
-        self.current_scope
+        default_env::load_default_variables(&mut env.borrow_mut())?;
+        default_env::load_default_functions(&mut env.borrow_mut())?;
+        default_env::load_default_aliases(&mut env.borrow_mut())?;
+
+        Ok(env)
     }
 
     pub fn declare_var(
@@ -63,28 +37,24 @@ impl Environment {
         value: RuntimeVal,
         constant: bool,
     ) -> Result<RuntimeVal, InterpreterError> {
-        let scope = &mut self.scopes[self.current_scope];
-
-        if scope.variables.contains_key(&varname) {
+        if self.variables.contains_key(&varname) {
             return Err(InterpreterError::VarAlreadyDeclared(varname));
         }
 
-        scope.variables.insert(varname.clone(), value.clone());
+        self.variables.insert(varname.clone(), value.clone());
         if constant {
-            scope.constants.insert(varname);
+            self.constants.insert(varname);
         }
         Ok(value)
     }
 
     pub fn lookup_var(&self, varname: &str) -> Result<RuntimeVal, InterpreterError> {
-        let mut current_idx = Some(self.current_scope);
+        if let Some(val) = self.variables.get(varname) {
+            return Ok(val.clone());
+        }
 
-        while let Some(idx) = current_idx {
-            let scope = &self.scopes[idx];
-            if let Some(val) = scope.variables.get(varname) {
-                return Ok(val.clone());
-            }
-            current_idx = scope.parent_idx;
+        if let Some(parent) = &self.parent {
+            return parent.borrow().lookup_var(varname);
         }
 
         Err(InterpreterError::VarUnresolvable(varname.to_string()))
@@ -95,19 +65,16 @@ impl Environment {
         varname: String,
         value: RuntimeVal,
     ) -> Result<RuntimeVal, InterpreterError> {
-        let mut current_idx = Some(self.current_scope);
-
-        while let Some(idx) = current_idx {
-            if self.scopes[idx].variables.contains_key(&varname) {
-                if self.scopes[idx].constants.contains(&varname) {
-                    return Err(InterpreterError::EditConst(varname));
-                }
-                self.scopes[idx]
-                    .variables
-                    .insert(varname.clone(), value.clone());
-                return Ok(value);
+        if self.variables.contains_key(&varname) {
+            if self.constants.contains(&varname) {
+                return Err(InterpreterError::EditConst(varname));
             }
-            current_idx = self.scopes[idx].parent_idx;
+            self.variables.insert(varname.clone(), value.clone());
+            return Ok(value);
+        }
+
+        if let Some(parent) = &self.parent {
+            return parent.borrow_mut().assign_var(varname, value);
         }
 
         // Declare var if not assignable (= not declared)

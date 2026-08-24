@@ -60,7 +60,6 @@ affiche(resultat)
 ## Work In Progress
 
 - Better errors (including lines...)
-- Better environment (Avoid Scope Accumulation : Memory Leak)
 
 ## Documentation
 
@@ -189,7 +188,10 @@ user = {
   subscribed: true,
   social : {
     followers: 100,
-    friends: 10
+    friends: [
+      "Bob",
+      "Charlie"
+    ]
   }
 }
 ```

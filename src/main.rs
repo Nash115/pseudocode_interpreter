@@ -1,7 +1,9 @@
+use std::cell::RefCell;
 use std::env;
 use std::fs;
 use std::io::{Write, stdin, stdout};
 use std::process::exit;
+use std::rc::Rc;
 
 mod frontend;
 mod runtime;
@@ -28,7 +30,10 @@ fn get_user_input() -> String {
     user_input
 }
 
-fn run_code(code: &str, env: &mut Environment) -> Result<RuntimeVal, Box<dyn std::error::Error>> {
+fn run_code(
+    code: &str,
+    env: &Rc<RefCell<Environment>>,
+) -> Result<RuntimeVal, Box<dyn std::error::Error>> {
     let tokens = tokenize(code)?;
     let program = Parser::new(tokens).produce_ast()?;
     let result = interpreter::evaluate(program, env)?;
@@ -38,7 +43,7 @@ fn run_code(code: &str, env: &mut Environment) -> Result<RuntimeVal, Box<dyn std
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let mut env = match Environment::new() {
+    let mut env = match Environment::create_global() {
         Ok(e) => e,
         Err(e) => {
             eprintln!("Error creating Environment : {}", e);

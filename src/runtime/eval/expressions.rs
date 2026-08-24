@@ -93,7 +93,7 @@ pub fn eval_binary_expr(
     left: Box<Expr>,
     right: Box<Expr>,
     operator: String,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let lhs = evaluate(Stmt::ExprStmt(*left), env)?;
     let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
@@ -136,7 +136,7 @@ pub fn eval_val_as_boolean(e: RuntimeVal) -> bool {
 pub fn eval_unary_expr(
     right: Box<Expr>,
     operator: String,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
 
@@ -150,7 +150,7 @@ pub fn eval_logical_expr(
     left: Box<Expr>,
     right: Box<Expr>,
     operator: String,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let lhs = evaluate(Stmt::ExprStmt(*left), env)?;
     let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
@@ -182,20 +182,20 @@ pub fn eval_logical_expr(
 
 pub fn eval_identifier(
     identifier: String,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
-    env.lookup_var(&identifier)
+    env.borrow().lookup_var(&identifier)
 }
 
 pub fn eval_assignment(
     assigne: Box<Expr>,
     value: Box<Expr>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     match *assigne {
         Expr::Identifier(i) => {
             let v = evaluate(Stmt::ExprStmt((*value).clone()), env)?;
-            env.assign_var(i, v)
+            env.borrow_mut().assign_var(i, v)
         }
         Expr::MemberExpr {
             object,
@@ -246,7 +246,7 @@ pub fn eval_assignment(
 
 pub fn eval_object_expr(
     properties: Vec<ObjectProperty>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut object_properties = HashMap::new();
 
@@ -256,7 +256,7 @@ pub fn eval_object_expr(
 
         let runtime_val = match value {
             Some(val) => evaluate(Stmt::ExprStmt(val), env)?,
-            None => env.lookup_var(&key)?,
+            None => env.borrow().lookup_var(&key)?,
         };
 
         object_properties.insert(key, runtime_val);
@@ -267,7 +267,7 @@ pub fn eval_object_expr(
 
 pub fn eval_list_expr(
     values: Vec<Expr>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut list_values = Vec::new();
 
@@ -282,7 +282,7 @@ pub fn eval_list_expr(
 fn get_member_key(
     property: &Expr,
     computed: bool,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<String, InterpreterError> {
     if !computed {
         match property {
@@ -305,7 +305,7 @@ pub fn eval_member_expr(
     object: Box<Expr>,
     property: Box<Expr>,
     computed: bool,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let obj = evaluate(Stmt::ExprStmt((*object).clone()), env)?;
     match obj {
@@ -344,7 +344,7 @@ pub fn eval_member_expr(
 pub fn eval_call_expr(
     args: Vec<Expr>,
     caller: Box<Expr>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut evaluated_args = Vec::new();
     for arg in args {
@@ -368,22 +368,26 @@ pub fn eval_call_expr(
                 });
             }
 
-            let previous_scope = env.push_scope(Some(declaration_env));
+            let scope = Rc::new(RefCell::new(Environment::new(Some(
+                declaration_env.clone(),
+            ))));
 
             for i in 0..params_len {
-                env.declare_var(parameters[i].clone(), evaluated_args[i].clone(), false)?;
+                scope.borrow_mut().declare_var(
+                    parameters[i].clone(),
+                    evaluated_args[i].clone(),
+                    false,
+                )?;
             }
 
             let mut result: RuntimeVal = RuntimeVal::Null;
             for s in body {
-                result = evaluate(s, env)?;
+                result = evaluate(s, &scope)?;
                 if let RuntimeVal::ReturnValue(val) = result {
                     result = *val;
                     break;
                 }
             }
-
-            env.pop_scope(previous_scope);
 
             Ok(result)
         }

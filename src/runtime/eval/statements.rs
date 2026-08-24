@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::frontend::ast::{Expr, Stmt};
 use crate::frontend::errors::InterpreterError;
 use crate::runtime::environment::Environment;
@@ -7,7 +10,7 @@ use crate::runtime::values::RuntimeVal;
 
 pub fn eval_program(
     body: Vec<Stmt>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut last_evaluated = RuntimeVal::Null;
     for statement in body {
@@ -23,61 +26,55 @@ pub fn eval_var_declaration(
     constant: bool,
     identifier: String,
     value: Option<Expr>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let val = match value {
         Some(v) => evaluate(Stmt::ExprStmt(v), env)?,
         None => RuntimeVal::Null,
     };
-    Ok(env.declare_var(identifier, val, constant)?)
+    Ok(env.borrow_mut().declare_var(identifier, val, constant)?)
 }
 
 pub fn eval_fn_declaration(
     name: String,
     parameters: Vec<String>,
     body: Vec<Stmt>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let f = RuntimeVal::Fn {
         name: name.clone(),
         parameters: parameters,
-        declaration_env: env.this_scope(),
+        declaration_env: env.clone(),
         body,
     };
 
-    Ok(env.declare_var(name, f, true)?)
+    Ok(env.borrow_mut().declare_var(name, f, true)?)
 }
 
 pub fn eval_condition(
     test: Expr,
     body: Vec<Stmt>,
     alternate: Option<Vec<Stmt>>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut last_evaluated = RuntimeVal::Null;
     let test_val = evaluate(Stmt::ExprStmt(test), env)?;
     if expressions::eval_val_as_boolean(test_val) {
-        let current_scope = env.this_scope();
-        let previous_scope = env.push_scope(Some(current_scope));
+        let scope = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
         for statement in body {
-            last_evaluated = evaluate(statement, env)?;
+            last_evaluated = evaluate(statement, &scope)?;
             if let RuntimeVal::ReturnValue(_) = last_evaluated {
-                env.pop_scope(previous_scope);
                 return Ok(last_evaluated);
             }
         }
-        env.pop_scope(previous_scope);
     } else if let Some(alt) = alternate {
-        let current_scope = env.this_scope();
-        let previous_scope = env.push_scope(Some(current_scope));
+        let scope = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
         for statement in alt {
-            last_evaluated = evaluate(statement, env)?;
+            last_evaluated = evaluate(statement, &scope)?;
             if let RuntimeVal::ReturnValue(_) = last_evaluated {
-                env.pop_scope(previous_scope);
                 return Ok(last_evaluated);
             }
         }
-        env.pop_scope(previous_scope);
     }
     Ok(last_evaluated)
 }
@@ -85,21 +82,18 @@ pub fn eval_condition(
 pub fn eval_while_loop(
     test: Expr,
     body: Vec<Stmt>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut last_evaluated = RuntimeVal::Null;
     while expressions::eval_val_as_boolean(evaluate(Stmt::ExprStmt(test.clone()), env)?) {
-        let current_scope = env.this_scope();
-        let previous_scope = env.push_scope(Some(current_scope));
+        let scope = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
         let body_clone = body.clone();
         for statement in body_clone {
-            last_evaluated = evaluate(statement, env)?;
+            last_evaluated = evaluate(statement, &scope)?;
             if let RuntimeVal::ReturnValue(_) = last_evaluated {
-                env.pop_scope(previous_scope);
                 return Ok(last_evaluated);
             }
         }
-        env.pop_scope(previous_scope);
     }
     Ok(last_evaluated)
 }
@@ -108,7 +102,7 @@ pub fn eval_for_loop(
     iterable: Expr,
     identifier: String,
     body: Vec<Stmt>,
-    env: &mut Environment,
+    env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, InterpreterError> {
     let mut last_evaluated = RuntimeVal::Null;
     let mut i = 0;
@@ -122,10 +116,9 @@ pub fn eval_for_loop(
     };
 
     while i < iterable_size {
-        let current_scope = env.this_scope();
-        let previous_scope = env.push_scope(Some(current_scope));
+        let scope = Rc::new(RefCell::new(Environment::new(Some(env.clone()))));
 
-        env.assign_var(
+        scope.borrow_mut().assign_var(
             identifier.clone(),
             match parsed_iterable.clone() {
                 RuntimeVal::List(v) => {
@@ -151,13 +144,11 @@ pub fn eval_for_loop(
 
         let body_clone = body.clone();
         for statement in body_clone {
-            last_evaluated = evaluate(statement, env)?;
+            last_evaluated = evaluate(statement, &scope)?;
             if let RuntimeVal::ReturnValue(_) = last_evaluated {
-                env.pop_scope(previous_scope);
                 return Ok(last_evaluated);
             }
         }
-        env.pop_scope(previous_scope);
 
         i += 1;
     }

@@ -226,10 +226,10 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
             chars.next();
         } else {
             // Multicharacter tokens
-            if c.is_alphabetic() {
+            if c.is_alphabetic() || c == '_' {
                 let mut ident = String::new();
                 while let Some(&next_c) = chars.peek() {
-                    if next_c.is_alphanumeric() {
+                    if next_c.is_alphanumeric() || next_c == '_' {
                         ident.push(next_c);
                         chars.next();
                     } else {

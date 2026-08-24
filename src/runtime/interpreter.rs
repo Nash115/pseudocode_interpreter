@@ -1,10 +1,16 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::frontend::ast::{Expr, Stmt};
 use crate::frontend::errors::InterpreterError;
 use crate::runtime::environment::Environment;
 use crate::runtime::eval;
 use crate::runtime::values::RuntimeVal;
 
-pub fn evaluate(statement: Stmt, env: &mut Environment) -> Result<RuntimeVal, InterpreterError> {
+pub fn evaluate(
+    statement: Stmt,
+    env: &Rc<RefCell<Environment>>,
+) -> Result<RuntimeVal, InterpreterError> {
     match statement {
         // Expr
         Stmt::ExprStmt(Expr::NumericLiteral(n)) => Ok(RuntimeVal::Number(n)),

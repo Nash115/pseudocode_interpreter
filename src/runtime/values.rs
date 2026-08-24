@@ -7,7 +7,7 @@ use crate::frontend::errors::InterpreterError;
 use crate::runtime::environment::Environment;
 
 pub type FunctionCall =
-    fn(Vec<RuntimeVal>, &mut Environment) -> Result<RuntimeVal, InterpreterError>;
+    fn(Vec<RuntimeVal>, &Rc<RefCell<Environment>>) -> Result<RuntimeVal, InterpreterError>;
 
 #[derive(Clone)]
 pub enum RuntimeVal {
@@ -21,7 +21,7 @@ pub enum RuntimeVal {
     Fn {
         name: String,
         parameters: Vec<String>,
-        declaration_env: usize,
+        declaration_env: Rc<RefCell<Environment>>,
         body: Vec<Stmt>,
     },
     ReturnValue(Box<RuntimeVal>),
@@ -56,7 +56,8 @@ impl PartialEq for RuntimeVal {
             ) => {
                 name1 == name2
                     && parameters1 == parameters2
-                    && declaration_env1 == declaration_env2
+                    && (Rc::ptr_eq(declaration_env1, declaration_env2)
+                        || (*declaration_env1.borrow() == *declaration_env2.borrow()))
                     && body1 == body2
             }
             _ => false,
