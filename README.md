@@ -57,10 +57,6 @@ variable resultat = ajouter(1,2)
 affiche(resultat)
 ```
 
-## Work In Progress
-
-- Better errors (including lines...)
-
 ## Documentation
 
 ### Keywords

@@ -1,72 +1,77 @@
+use crate::frontend::span::Spanned;
+
+pub type ExprNode = Spanned<Expr>;
+pub type StmtNode = Spanned<Stmt>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     NumericLiteral(f64),
     StringLiteral(String),
     Identifier(String),
     BinaryExpr {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        left: Box<ExprNode>,
+        right: Box<ExprNode>,
         operator: String,
     },
     UnaryExpr {
-        right: Box<Expr>,
+        right: Box<ExprNode>,
         operator: String,
     },
     LogicalExpr {
-        left: Box<Expr>,
-        right: Box<Expr>,
+        left: Box<ExprNode>,
+        right: Box<ExprNode>,
         operator: String,
     },
     ObjectLiteral(Vec<ObjectProperty>),
-    ListLiteral(Vec<Expr>),
+    ListLiteral(Vec<ExprNode>),
     AssignmentExpr {
-        assigne: Box<Expr>,
-        value: Box<Expr>,
+        assigne: Box<ExprNode>,
+        value: Box<ExprNode>,
     },
     MemberExpr {
-        object: Box<Expr>,
-        property: Box<Expr>,
+        object: Box<ExprNode>,
+        property: Box<ExprNode>,
         computed: bool,
     },
     CallExpr {
-        args: Vec<Expr>,
-        caller: Box<Expr>,
+        args: Vec<ExprNode>,
+        caller: Box<ExprNode>,
     },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    Program(Vec<Stmt>),
+    Program(Vec<StmtNode>),
     VarDeclaration {
         constant: bool,
         identifier: String,
-        value: Option<Expr>,
+        value: Option<ExprNode>,
     },
     FnDeclaration {
         name: String,
         parameters: Vec<String>,
-        body: Vec<Stmt>,
+        body: Vec<StmtNode>,
     },
-    Return(Expr),
+    Return(ExprNode),
     Condition {
-        test: Expr,
-        body: Vec<Stmt>,
-        alternate: Option<Vec<Stmt>>,
+        test: ExprNode,
+        body: Vec<StmtNode>,
+        alternate: Option<Vec<StmtNode>>,
     },
     WhileLoop {
-        test: Expr,
-        body: Vec<Stmt>,
+        test: ExprNode,
+        body: Vec<StmtNode>,
     },
     ForLoop {
-        iterable: Expr,
+        iterable: ExprNode,
         identifier: String,
-        body: Vec<Stmt>,
+        body: Vec<StmtNode>,
     },
-    ExprStmt(Expr),
+    ExprStmt(ExprNode),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectProperty {
     pub key: String,
-    pub value: Option<Expr>,
+    pub value: Option<ExprNode>,
 }

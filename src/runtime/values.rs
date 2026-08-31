@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::frontend::ast::Stmt;
+use crate::frontend::ast::StmtNode;
 use crate::frontend::errors::InterpreterError;
 use crate::runtime::environment::Environment;
 
@@ -22,7 +22,7 @@ pub enum RuntimeVal {
         name: String,
         parameters: Vec<String>,
         declaration_env: Rc<RefCell<Environment>>,
-        body: Vec<Stmt>,
+        body: Vec<StmtNode>,
     },
     ReturnValue(Box<RuntimeVal>),
 }
@@ -56,8 +56,7 @@ impl PartialEq for RuntimeVal {
             ) => {
                 name1 == name2
                     && parameters1 == parameters2
-                    && (Rc::ptr_eq(declaration_env1, declaration_env2)
-                        || (*declaration_env1.borrow() == *declaration_env2.borrow()))
+                    && Rc::ptr_eq(declaration_env1, declaration_env2)
                     && body1 == body2
             }
             _ => false,

@@ -2,8 +2,14 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
-use crate::frontend::ast::{Expr, ObjectProperty, Stmt};
-use crate::frontend::errors::InterpreterError;
+use crate::frontend::ast::ObjectProperty;
+use crate::frontend::ast::{Expr::*, Stmt::*};
+use crate::frontend::ast::{ExprNode, StmtNode};
+use crate::frontend::errors::{
+    InterpreterError::{self, *},
+    RuntimeError,
+};
+use crate::frontend::span::{Position, Span};
 use crate::runtime::environment::Environment;
 use crate::runtime::interpreter::evaluate;
 use crate::runtime::values::RuntimeVal::{self, Object};
@@ -11,21 +17,28 @@ use crate::runtime::values::RuntimeVal::{self, Object};
 fn eval_numeric_binary_expr(
     lhs: f64,
     rhs: f64,
+    span_left: Span,
+    span_right: Span,
     operator: String,
-) -> Result<RuntimeVal, InterpreterError> {
+) -> Result<RuntimeVal, RuntimeError> {
     let result: f64 = match operator.as_str() {
         "+" => lhs + rhs,
         "-" => lhs - rhs,
         "*" => lhs * rhs,
         "/" => {
             if rhs == 0.0 {
-                return Err(InterpreterError::DivBy0);
+                return Err(InterpreterError::with_span(DivBy0, span_right));
             } else {
                 lhs / rhs
             }
         }
         "%" => lhs % rhs,
-        _ => return Err(InterpreterError::UnknownBinaryOperator(operator)),
+        _ => {
+            return Err(InterpreterError::with_span(
+                UnknownBinaryOperator(operator),
+                span_left.merge(&span_right),
+            ));
+        }
     };
     Ok(RuntimeVal::Number(result))
 }
@@ -33,14 +46,24 @@ fn eval_numeric_binary_expr(
 fn eval_string_binary_expr(
     lhs: String,
     rhs: String,
+    span_left: Span,
+    span_right: Span,
     operator: String,
-) -> Result<RuntimeVal, InterpreterError> {
+) -> Result<RuntimeVal, RuntimeError> {
     let result: String = match operator.as_str() {
         "+" => format!("{}{}", lhs, rhs),
         "-" | "*" | "/" | "%" => {
-            return Err(InterpreterError::UnpermittedBinaryOperation { lhs, rhs, operator });
+            return Err(InterpreterError::with_span(
+                UnpermittedBinaryOperation { lhs, rhs, operator },
+                span_left.merge(&span_right),
+            ));
         }
-        _ => return Err(InterpreterError::UnknownBinaryOperator(operator)),
+        _ => {
+            return Err(InterpreterError::with_span(
+                UnknownBinaryOperator(operator),
+                span_left.merge(&span_right),
+            ));
+        }
     };
     Ok(RuntimeVal::String(result))
 }
@@ -48,8 +71,10 @@ fn eval_string_binary_expr(
 fn eval_list_binary_expr(
     lhs: Vec<RuntimeVal>,
     rhs: Vec<RuntimeVal>,
+    span_left: Span,
+    span_right: Span,
     operator: String,
-) -> Result<RuntimeVal, InterpreterError> {
+) -> Result<RuntimeVal, RuntimeError> {
     let result: Vec<RuntimeVal> = match operator.as_str() {
         "+" => {
             let mut t = Vec::new();
@@ -62,18 +87,26 @@ fn eval_list_binary_expr(
             t
         }
         "-" | "*" | "/" | "%" => {
-            return Err(InterpreterError::UnpermittedBinaryOperation {
-                lhs: format!("{:?}", lhs),
-                rhs: format!("{:?}", rhs),
-                operator,
-            });
+            return Err(InterpreterError::with_span(
+                UnpermittedBinaryOperation {
+                    lhs: format!("{:?}", lhs),
+                    rhs: format!("{:?}", rhs),
+                    operator,
+                },
+                span_left.merge(&span_right),
+            ));
         }
-        _ => return Err(InterpreterError::UnknownBinaryOperator(operator)),
+        _ => {
+            return Err(InterpreterError::with_span(
+                UnknownBinaryOperator(operator),
+                span_left.merge(&span_right),
+            ));
+        }
     };
     Ok(RuntimeVal::List(Rc::new(RefCell::new(result))))
 }
 
-fn eval_val_as_number(e: RuntimeVal) -> Result<f64, InterpreterError> {
+fn eval_val_as_number(e: RuntimeVal, span: Span) -> Result<f64, RuntimeError> {
     match e {
         RuntimeVal::Null => Ok(0.0),
         RuntimeVal::Number(n) => Ok(n),
@@ -84,33 +117,39 @@ fn eval_val_as_number(e: RuntimeVal) -> Result<f64, InterpreterError> {
                 Ok(0.0)
             }
         }
-        RuntimeVal::ReturnValue(v) => eval_val_as_number(*v),
-        v => Err(InterpreterError::NumberInterpretation(v)),
+        RuntimeVal::ReturnValue(v) => eval_val_as_number(*v, span),
+        v => Err(InterpreterError::with_span(NumberInterpretation(v), span)),
     }
 }
 
 pub fn eval_binary_expr(
-    left: Box<Expr>,
-    right: Box<Expr>,
+    left: Box<ExprNode>,
+    right: Box<ExprNode>,
     operator: String,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
-    let lhs = evaluate(Stmt::ExprStmt(*left), env)?;
-    let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
+) -> Result<RuntimeVal, RuntimeError> {
+    let lhs = evaluate(StmtNode::new(ExprStmt(*left.clone()), left.span), env)?;
+    let rhs = evaluate(StmtNode::new(ExprStmt(*right.clone()), right.span), env)?;
 
     if let (RuntimeVal::String(ls), RuntimeVal::String(rs)) = (lhs.clone(), rhs.clone()) {
-        return Ok(eval_string_binary_expr(ls, rs, operator)?);
+        return Ok(eval_string_binary_expr(
+            ls, rs, left.span, right.span, operator,
+        )?);
     }
     if let (RuntimeVal::List(ls), RuntimeVal::List(rs)) = (lhs.clone(), rhs.clone()) {
         let ll = ls.borrow().clone();
         let rl = rs.borrow().clone();
-        return Ok(eval_list_binary_expr(ll, rl, operator)?);
+        return Ok(eval_list_binary_expr(
+            ll, rl, left.span, right.span, operator,
+        )?);
     }
 
-    let lhsv = eval_val_as_number(lhs)?;
-    let rhsv = eval_val_as_number(rhs)?;
+    let lhsv = eval_val_as_number(lhs, left.span)?;
+    let rhsv = eval_val_as_number(rhs, right.span)?;
 
-    Ok(eval_numeric_binary_expr(lhsv, rhsv, operator)?)
+    Ok(eval_numeric_binary_expr(
+        lhsv, rhsv, left.span, right.span, operator,
+    )?)
 }
 
 pub fn eval_val_as_boolean(e: RuntimeVal) -> bool {
@@ -134,26 +173,40 @@ pub fn eval_val_as_boolean(e: RuntimeVal) -> bool {
 }
 
 pub fn eval_unary_expr(
-    right: Box<Expr>,
+    right: Box<ExprNode>,
     operator: String,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
-    let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
+) -> Result<RuntimeVal, RuntimeError> {
+    let rhs = evaluate(StmtNode::new(ExprStmt(*right.clone()), right.span), env)?;
 
     match operator.as_str() {
         "!" => Ok(RuntimeVal::Boolean(!eval_val_as_boolean(rhs))),
-        _ => return Err(InterpreterError::UnknownUnaryOperator(operator)),
+        _ => {
+            return Err(InterpreterError::with_span(
+                UnknownUnaryOperator(operator),
+                Span {
+                    start: Position {
+                        line: right.span.start.line,
+                        col: right.span.start.col - 1,
+                    },
+                    end: Position {
+                        line: right.span.start.line,
+                        col: right.span.start.col - 1,
+                    },
+                },
+            ));
+        }
     }
 }
 
 pub fn eval_logical_expr(
-    left: Box<Expr>,
-    right: Box<Expr>,
+    left: Box<ExprNode>,
+    right: Box<ExprNode>,
     operator: String,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
-    let lhs = evaluate(Stmt::ExprStmt(*left), env)?;
-    let rhs = evaluate(Stmt::ExprStmt(*right), env)?;
+) -> Result<RuntimeVal, RuntimeError> {
+    let lhs = evaluate(StmtNode::new(ExprStmt(*left.clone()), left.span), env)?;
+    let rhs = evaluate(StmtNode::new(ExprStmt(*right.clone()), right.span), env)?;
 
     match operator.as_str() {
         "||" => Ok(RuntimeVal::Boolean(
@@ -165,89 +218,115 @@ pub fn eval_logical_expr(
         "==" => Ok(RuntimeVal::Boolean(lhs == rhs)),
         "!=" => Ok(RuntimeVal::Boolean(lhs != rhs)),
         "<=" => Ok(RuntimeVal::Boolean(
-            eval_val_as_number(lhs)? <= eval_val_as_number(rhs)?,
+            eval_val_as_number(lhs, left.span)? <= eval_val_as_number(rhs, right.span)?,
         )),
         "<" => Ok(RuntimeVal::Boolean(
-            eval_val_as_number(lhs)? < eval_val_as_number(rhs)?,
+            eval_val_as_number(lhs, left.span)? < eval_val_as_number(rhs, right.span)?,
         )),
         ">=" => Ok(RuntimeVal::Boolean(
-            eval_val_as_number(lhs)? >= eval_val_as_number(rhs)?,
+            eval_val_as_number(lhs, left.span)? >= eval_val_as_number(rhs, right.span)?,
         )),
         ">" => Ok(RuntimeVal::Boolean(
-            eval_val_as_number(lhs)? > eval_val_as_number(rhs)?,
+            eval_val_as_number(lhs, left.span)? > eval_val_as_number(rhs, right.span)?,
         )),
-        _ => return Err(InterpreterError::UnknownLogicalOperator(operator)),
+        _ => {
+            return Err(InterpreterError::with_span(
+                UnknownLogicalOperator(operator),
+                left.span.merge(&right.span),
+            ));
+        }
     }
 }
 
 pub fn eval_identifier(
     identifier: String,
+    span: Span,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
-    env.borrow().lookup_var(&identifier)
+) -> Result<RuntimeVal, RuntimeError> {
+    env.borrow()
+        .lookup_var(&identifier)
+        .map_err(|err| err.with_span(span))
 }
 
 pub fn eval_assignment(
-    assigne: Box<Expr>,
-    value: Box<Expr>,
+    assigne: Box<ExprNode>,
+    value: Box<ExprNode>,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
-    match *assigne {
-        Expr::Identifier(i) => {
-            let v = evaluate(Stmt::ExprStmt((*value).clone()), env)?;
-            env.borrow_mut().assign_var(i, v)
+) -> Result<RuntimeVal, RuntimeError> {
+    match assigne.clone().node {
+        Identifier(i) => {
+            let v = evaluate(StmtNode::new(ExprStmt((*value).clone()), value.span), env)?;
+            env.borrow_mut()
+                .assign_var(i, v)
+                .map_err(|err| err.with_span(assigne.span.merge(&value.span)))
         }
-        Expr::MemberExpr {
+        MemberExpr {
             object,
             property,
             computed,
         } => {
-            let obj = evaluate(Stmt::ExprStmt((*object).clone()), env)?;
+            let obj = evaluate(StmtNode::new(ExprStmt((*object).clone()), object.span), env)?;
 
             if let RuntimeVal::Object(map) = obj {
                 let key = get_member_key(&property, computed, env)?;
-                let val = evaluate(Stmt::ExprStmt((*value).clone()), env)?;
+                let val = evaluate(StmtNode::new(ExprStmt((*value).clone()), value.span), env)?;
                 map.borrow_mut().insert(key, val.clone());
                 return Ok(val);
             } else if let RuntimeVal::List(v) = obj {
                 let key = get_member_key(&property, computed, env)?;
-                let val = evaluate(Stmt::ExprStmt((*value).clone()), env)?;
+                let val = evaluate(StmtNode::new(ExprStmt((*value).clone()), value.span), env)?;
                 let index: i64 = match key.parse() {
                     Ok(v) => v,
                     Err(_) => {
-                        return Err(InterpreterError::InvalidIndex(key));
+                        return Err(InterpreterError::with_span(
+                            InvalidIndex(key),
+                            property.span,
+                        ));
                     }
                 };
                 let mut borrowed = v.borrow_mut();
                 if index < -(borrowed.len() as i64) {
-                    return Err(InterpreterError::OutOfBounds(index));
+                    return Err(InterpreterError::with_span(
+                        OutOfBounds(index),
+                        property.span,
+                    ));
                 }
                 let mut uindex = index as usize;
                 if index < 0 {
                     uindex = borrowed.len() - ((-1 * index) as usize);
                 }
                 if uindex >= borrowed.len() {
-                    return Err(InterpreterError::OutOfBounds(index));
+                    return Err(InterpreterError::with_span(
+                        OutOfBounds(index),
+                        property.span,
+                    ));
                 }
                 borrowed[uindex] = val.clone();
                 return Ok(val);
             } else {
-                return Err(InterpreterError::MemberNotAccessible {
-                    action: String::from("Assignment"),
-                    value: obj,
-                });
+                return Err(InterpreterError::with_span(
+                    MemberNotAccessible {
+                        action: String::from("Assignment"),
+                        value: obj,
+                    },
+                    value.span,
+                ));
             }
         }
         expr => {
-            return Err(InterpreterError::Assignment(expr));
+            return Err(InterpreterError::with_span(
+                Assignment(expr),
+                assigne.span.merge(&value.span),
+            ));
         }
     }
 }
 
 pub fn eval_object_expr(
     properties: Vec<ObjectProperty>,
+    span: Span,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
+) -> Result<RuntimeVal, RuntimeError> {
     let mut object_properties = HashMap::new();
 
     for prop in properties {
@@ -255,8 +334,11 @@ pub fn eval_object_expr(
         let value = prop.value;
 
         let runtime_val = match value {
-            Some(val) => evaluate(Stmt::ExprStmt(val), env)?,
-            None => env.borrow().lookup_var(&key)?,
+            Some(val) => evaluate(StmtNode::new(ExprStmt(val.clone()), val.span), env)?,
+            None => env
+                .borrow()
+                .lookup_var(&key)
+                .map_err(|err| err.with_span(span))?,
         };
 
         object_properties.insert(key, runtime_val);
@@ -266,13 +348,13 @@ pub fn eval_object_expr(
 }
 
 pub fn eval_list_expr(
-    values: Vec<Expr>,
+    values: Vec<ExprNode>,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
+) -> Result<RuntimeVal, RuntimeError> {
     let mut list_values = Vec::new();
 
     for value in values {
-        let runtime_val = evaluate(Stmt::ExprStmt(value), env)?;
+        let runtime_val = evaluate(StmtNode::new(ExprStmt(value.clone()), value.span), env)?;
         list_values.push(runtime_val);
     }
 
@@ -280,34 +362,41 @@ pub fn eval_list_expr(
 }
 
 fn get_member_key(
-    property: &Expr,
+    property: &ExprNode,
     computed: bool,
     env: &Rc<RefCell<Environment>>,
-) -> Result<String, InterpreterError> {
+) -> Result<String, RuntimeError> {
     if !computed {
-        match property {
-            Expr::Identifier(ident) => Ok(ident.clone()),
-            p => Err(InterpreterError::ObjectKeyUncomputedNotIdentifier(
-                p.clone(),
+        match property.clone().node {
+            Identifier(ident) => Ok(ident.clone()),
+            p => Err(InterpreterError::with_span(
+                ObjectKeyUncomputedNotIdentifier(p.clone()),
+                property.span,
             )),
         }
     } else {
-        let evaluated_prop = evaluate(Stmt::ExprStmt(property.clone()), env)?;
+        let evaluated_prop = evaluate(
+            StmtNode::new(ExprStmt(property.clone()), property.span),
+            env,
+        )?;
         match evaluated_prop {
             RuntimeVal::Number(n) => Ok(n.to_string()),
             RuntimeVal::String(s) => Ok(s),
-            v => Err(InterpreterError::ObjectKeyComputedType(v)),
+            v => Err(InterpreterError::with_span(
+                ObjectKeyComputedType(v),
+                property.span,
+            )),
         }
     }
 }
 
 pub fn eval_member_expr(
-    object: Box<Expr>,
-    property: Box<Expr>,
+    object: Box<ExprNode>,
+    property: Box<ExprNode>,
     computed: bool,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
-    let obj = evaluate(Stmt::ExprStmt((*object).clone()), env)?;
+) -> Result<RuntimeVal, RuntimeError> {
+    let obj = evaluate(StmtNode::new(ExprStmt((*object).clone()), object.span), env)?;
     match obj {
         RuntimeVal::Object(map) => {
             let key = get_member_key(&property, computed, env)?;
@@ -318,41 +407,60 @@ pub fn eval_member_expr(
             let index: i64 = match key.parse() {
                 Ok(v) => v,
                 Err(_) => {
-                    return Err(InterpreterError::InvalidIndex(key));
+                    return Err(InterpreterError::with_span(
+                        InvalidIndex(key),
+                        property.span,
+                    ));
                 }
             };
             let borrowed = v.borrow_mut();
             if index < -(borrowed.len() as i64) {
-                return Err(InterpreterError::OutOfBounds(index));
+                return Err(InterpreterError::with_span(
+                    OutOfBounds(index),
+                    property.span,
+                ));
             }
             let mut uindex = index as usize;
             if index < 0 {
                 uindex = borrowed.len() - ((-1 * index) as usize);
             }
             if uindex >= borrowed.len() {
-                return Err(InterpreterError::OutOfBounds(index));
+                return Err(InterpreterError::with_span(
+                    OutOfBounds(index),
+                    property.span,
+                ));
             }
             return Ok(borrowed[uindex].clone());
         }
-        _ => Err(InterpreterError::MemberNotAccessible {
-            action: String::from("Key access"),
-            value: obj,
-        }),
+        _ => Err(InterpreterError::with_span(
+            MemberNotAccessible {
+                action: String::from("Key access"),
+                value: obj,
+            },
+            object.span.merge(&property.span),
+        )),
     }
 }
 
 pub fn eval_call_expr(
-    args: Vec<Expr>,
-    caller: Box<Expr>,
+    args: Vec<ExprNode>,
+    caller: Box<ExprNode>,
     env: &Rc<RefCell<Environment>>,
-) -> Result<RuntimeVal, InterpreterError> {
+) -> Result<RuntimeVal, RuntimeError> {
     let mut evaluated_args = Vec::new();
+    let mut args_span = Span::null();
     for arg in args {
-        evaluated_args.push(evaluate(Stmt::ExprStmt(arg), env)?)
+        args_span = args_span.merge(&arg.span);
+        evaluated_args.push(evaluate(
+            StmtNode::new(ExprStmt(arg.clone()), arg.span),
+            env,
+        )?)
     }
-    let f = evaluate(Stmt::ExprStmt(*caller), env)?;
+    let f = evaluate(StmtNode::new(ExprStmt(*caller.clone()), caller.span), env)?;
     match f {
-        RuntimeVal::NativeFn(call) => Ok(call(evaluated_args, env)?),
+        RuntimeVal::NativeFn(call) => {
+            call(evaluated_args, env).map_err(|err| err.with_span(caller.span.merge(&args_span)))
+        }
         RuntimeVal::Fn {
             name,
             parameters,
@@ -361,11 +469,14 @@ pub fn eval_call_expr(
         } => {
             let params_len = parameters.len();
             if params_len != evaluated_args.len() {
-                return Err(InterpreterError::FunctionCallArguments {
-                    name,
-                    expected: parameters.len(),
-                    given: evaluated_args.len(),
-                });
+                return Err(InterpreterError::with_span(
+                    FunctionCallArguments {
+                        name,
+                        expected: parameters.len(),
+                        given: evaluated_args.len(),
+                    },
+                    args_span,
+                ));
             }
 
             let scope = Rc::new(RefCell::new(Environment::new(Some(
@@ -373,11 +484,10 @@ pub fn eval_call_expr(
             ))));
 
             for i in 0..params_len {
-                scope.borrow_mut().declare_var(
-                    parameters[i].clone(),
-                    evaluated_args[i].clone(),
-                    false,
-                )?;
+                scope
+                    .borrow_mut()
+                    .declare_var(parameters[i].clone(), evaluated_args[i].clone(), false)
+                    .map_err(|err| err.with_span(caller.span.merge(&args_span)))?;
             }
 
             let mut result: RuntimeVal = RuntimeVal::Null;
@@ -391,9 +501,12 @@ pub fn eval_call_expr(
 
             Ok(result)
         }
-        v => Err(InterpreterError::NotAFunction {
-            action: String::from("call"),
-            value: v,
-        }),
+        v => Err(InterpreterError::with_span(
+            NotAFunction {
+                action: String::from("call"),
+                value: v,
+            },
+            caller.span,
+        )),
     }
 }

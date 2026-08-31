@@ -72,7 +72,7 @@ pub fn load_default_functions(env: &mut Environment) -> Result<(), InterpreterEr
             if _args.len() != 2 {
                 return Err(InterpreterError::FunctionCallArguments {
                     name: "push (NATIVE FUNCTION)".to_string(),
-                    expected: 1,
+                    expected: 2,
                     given: _args.len(),
                 });
             }

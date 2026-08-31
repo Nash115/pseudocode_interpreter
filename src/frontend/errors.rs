@@ -1,8 +1,8 @@
-use std::format;
 use std::num::ParseFloatError;
 
 use crate::frontend::ast::Expr;
 use crate::frontend::lexer::{Token, TokenType};
+use crate::frontend::span::Span;
 use crate::runtime::values::RuntimeVal;
 
 pub struct Colors;
@@ -36,8 +36,50 @@ impl Colors {
     pub fn hint(message: &str) -> String {
         format!("{}{}{}", Colors::BLUE, message, Colors::RESET)
     }
+    pub fn warn(message: &str) -> String {
+        format!("{}{}{}", Colors::YELLOW, message, Colors::RESET)
+    }
 }
 
+pub fn format_error_snippet(source_code: &str, span: &Span) -> String {
+    if span.is_null() {
+        return String::from("(Unknown location)");
+    }
+    let line_index = span.start.line.saturating_sub(1);
+    let line_text = source_code.lines().nth(line_index).unwrap_or("");
+
+    let col = span.start.col;
+    let pointer_padding = " ".repeat(col.saturating_sub(1));
+
+    let token_len = if span.start.line == span.end.line {
+        span.end.col.saturating_sub(span.start.col).max(1)
+    } else {
+        line_text.len().saturating_sub(col.saturating_sub(1)).max(1)
+    };
+
+    let pointers = "^".repeat(token_len);
+
+    format!(
+        "  --> {}\n{:>3} | {}\n    | {}{}",
+        span,
+        span.start.line,
+        line_text,
+        pointer_padding,
+        Colors::warn(&pointers)
+    )
+}
+
+#[derive(Debug)]
+pub struct LexerErrorWithSpan {
+    pub error: LexerError,
+    pub span: Span,
+}
+impl std::error::Error for LexerErrorWithSpan {}
+impl std::fmt::Display for LexerErrorWithSpan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        return write!(f, "{}", self.error);
+    }
+}
 #[derive(Debug)]
 pub enum LexerError {
     UnknownCharacter(char),
@@ -53,7 +95,23 @@ impl std::fmt::Display for LexerError {
         }
     }
 }
+impl LexerError {
+    pub fn with_span(self, span: Span) -> LexerErrorWithSpan {
+        LexerErrorWithSpan { error: self, span }
+    }
+}
 
+#[derive(Debug)]
+pub struct ParserErrorWithSpan {
+    pub error: ParserError,
+    pub span: Span,
+}
+impl std::error::Error for ParserErrorWithSpan {}
+impl std::fmt::Display for ParserErrorWithSpan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        return write!(f, "{}", self.error);
+    }
+}
 #[derive(Debug)]
 pub enum ParserError {
     TokenExpected {
@@ -119,7 +177,23 @@ impl std::fmt::Display for ParserError {
         }
     }
 }
+impl ParserError {
+    pub fn with_span(self, span: Span) -> ParserErrorWithSpan {
+        ParserErrorWithSpan { error: self, span }
+    }
+}
 
+#[derive(Debug)]
+pub struct RuntimeError {
+    pub error: InterpreterError,
+    pub span: Span,
+}
+impl std::error::Error for RuntimeError {}
+impl std::fmt::Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        return write!(f, "{}", self.error);
+    }
+}
 #[derive(Debug)]
 pub enum InterpreterError {
     UnexpectedReturn,
@@ -289,5 +363,10 @@ impl std::fmt::Display for InterpreterError {
                 );
             }
         }
+    }
+}
+impl InterpreterError {
+    pub fn with_span(self, span: Span) -> RuntimeError {
+        RuntimeError { error: self, span }
     }
 }

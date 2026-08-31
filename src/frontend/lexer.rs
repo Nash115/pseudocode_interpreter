@@ -1,10 +1,16 @@
-use crate::frontend::errors::LexerError;
+use crate::frontend::errors::{
+    LexerError::{self, *},
+    LexerErrorWithSpan,
+};
+use crate::frontend::span::{Position, Span};
+
+use self::TokenType::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     // Litral
     Number,
-    String,
+    StringToken,
     Identifier,
 
     // Keywords
@@ -47,12 +53,40 @@ pub enum TokenType {
 pub struct Token {
     pub value: String,
     pub token_type: TokenType,
+    pub span: Span,
 }
 impl Token {
-    pub fn new(value: String, token_type: TokenType) -> Token {
+    pub fn new(value: String, token_type: TokenType, line: usize, col: usize) -> Token {
         Token {
             value,
             token_type: token_type,
+            span: Span {
+                start: Position { line, col },
+                end: Position { line, col },
+            },
+        }
+    }
+    pub fn new_multichar(
+        value: String,
+        token_type: TokenType,
+        start_line: usize,
+        start_col: usize,
+        end_line: usize,
+        end_col: usize,
+    ) -> Token {
+        Token {
+            value,
+            token_type: token_type,
+            span: Span {
+                start: Position {
+                    line: start_line,
+                    col: start_col,
+                },
+                end: Position {
+                    line: end_line,
+                    col: end_col,
+                },
+            },
         }
     }
 }
@@ -60,59 +94,59 @@ impl Token {
 fn keyword(str: String) -> TokenType {
     match str.as_str() {
         // Let
-        "var" => TokenType::Let,
-        "let" => TokenType::Let,
-        "variable" => TokenType::Let,
+        "var" => Let,
+        "let" => Let,
+        "variable" => Let,
         // Const
-        "const" => TokenType::Const,
-        "constante" => TokenType::Const,
+        "const" => Const,
+        "constante" => Const,
         // If
-        "if" => TokenType::If,
-        "si" => TokenType::If,
-        "then" => TokenType::Then,
-        "alors" => TokenType::Then,
-        "else" => TokenType::Else,
-        "sinon" => TokenType::Else,
-        "endIf" => TokenType::IfEnd,
-        "finSi" => TokenType::IfEnd,
+        "if" => If,
+        "si" => If,
+        "then" => Then,
+        "alors" => Then,
+        "else" => Else,
+        "sinon" => Else,
+        "endIf" => IfEnd,
+        "finSi" => IfEnd,
         // Loops
-        "while" => TokenType::While,
-        "tantQue" => TokenType::While,
-        "endWhile" => TokenType::WhileEnd,
-        "finTantQue" => TokenType::WhileEnd,
-        "for" => TokenType::For,
-        "pour" => TokenType::For,
-        "in" => TokenType::In,
-        "dans" => TokenType::In,
-        "endFor" => TokenType::ForEnd,
-        "finPour" => TokenType::ForEnd,
+        "while" => While,
+        "tantQue" => While,
+        "endWhile" => WhileEnd,
+        "finTantQue" => WhileEnd,
+        "for" => For,
+        "pour" => For,
+        "in" => In,
+        "dans" => In,
+        "endFor" => ForEnd,
+        "finPour" => ForEnd,
         // Fn
-        "fn" => TokenType::FnStart,
-        "function" => TokenType::FnStart,
-        "fonction" => TokenType::FnStart,
-        "procedure" => TokenType::FnStart,
-        "endFn" => TokenType::FnEnd,
-        "finFn" => TokenType::FnEnd,
-        "endFunction" => TokenType::FnEnd,
-        "finFonction" => TokenType::FnEnd,
-        "endProcedure" => TokenType::FnEnd,
-        "finProcedure" => TokenType::FnEnd,
-        "return" => TokenType::Return,
-        "retourner" => TokenType::Return,
-        "renvoyer" => TokenType::Return,
+        "fn" => FnStart,
+        "function" => FnStart,
+        "fonction" => FnStart,
+        "procedure" => FnStart,
+        "endFn" => FnEnd,
+        "finFn" => FnEnd,
+        "endFunction" => FnEnd,
+        "finFonction" => FnEnd,
+        "endProcedure" => FnEnd,
+        "finProcedure" => FnEnd,
+        "return" => Return,
+        "retourner" => Return,
+        "renvoyer" => Return,
         // Logical operators
-        "not" => TokenType::UnaryOperator,
-        "non" => TokenType::UnaryOperator,
-        "&&" => TokenType::LogicalOperator,
-        "and" => TokenType::LogicalOperator,
-        "et" => TokenType::LogicalOperator,
-        "||" => TokenType::LogicalOperator,
-        "or" => TokenType::LogicalOperator,
-        "ou" => TokenType::LogicalOperator,
-        "is" => TokenType::LogicalOperator,
-        "est" => TokenType::LogicalOperator,
+        "not" => UnaryOperator,
+        "non" => UnaryOperator,
+        "&&" => LogicalOperator,
+        "and" => LogicalOperator,
+        "et" => LogicalOperator,
+        "||" => LogicalOperator,
+        "or" => LogicalOperator,
+        "ou" => LogicalOperator,
+        "is" => LogicalOperator,
+        "est" => LogicalOperator,
         // Fallback
-        _ => TokenType::Identifier,
+        _ => Identifier,
     }
 }
 
@@ -120,29 +154,42 @@ fn skippable(car: char) -> bool {
     car.is_whitespace()
 }
 
-pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
+pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerErrorWithSpan> {
     let mut tokens = Vec::new();
     let mut chars = source_code.chars().peekable();
 
+    let mut line: usize = 1;
+    let mut col: usize = 1;
+
     while let Some(&c) = chars.peek() {
-        if c == '(' {
-            tokens.push(Token::new(c.to_string(), TokenType::OpenParen));
+        if c == '\n' {
+            line += 1;
+            col = 1;
             chars.next();
+        } else if c == '(' {
+            tokens.push(Token::new(c.to_string(), OpenParen, line, col));
+            chars.next();
+            col += 1;
         } else if c == ')' {
-            tokens.push(Token::new(c.to_string(), TokenType::CloseParen));
+            tokens.push(Token::new(c.to_string(), CloseParen, line, col));
             chars.next();
+            col += 1;
         } else if c == '{' {
-            tokens.push(Token::new(c.to_string(), TokenType::OpenBrace));
+            tokens.push(Token::new(c.to_string(), OpenBrace, line, col));
             chars.next();
+            col += 1;
         } else if c == '}' {
-            tokens.push(Token::new(c.to_string(), TokenType::CloseBrace));
+            tokens.push(Token::new(c.to_string(), CloseBrace, line, col));
             chars.next();
+            col += 1;
         } else if c == '[' {
-            tokens.push(Token::new(c.to_string(), TokenType::OpenBracket));
+            tokens.push(Token::new(c.to_string(), OpenBracket, line, col));
             chars.next();
+            col += 1;
         } else if c == ']' {
-            tokens.push(Token::new(c.to_string(), TokenType::CloseBracket));
+            tokens.push(Token::new(c.to_string(), CloseBracket, line, col));
             chars.next();
+            col += 1;
         } else if c == '#' {
             while let Some(&next_c) = chars.peek() {
                 if next_c == '\n' {
@@ -153,6 +200,7 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
         } else if c == '/' {
             // Handle Division and '//' Comments
             chars.next();
+            col += 1;
             if let Some(&'/') = chars.peek() {
                 // COMMENT
                 chars.next();
@@ -164,33 +212,39 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
                 }
             } else {
                 // DIVISION
-                tokens.push(Token::new(c.to_string(), TokenType::BinaryOperator));
+                tokens.push(Token::new(c.to_string(), BinaryOperator, line, col));
             }
         } else if c == '+' || c == '-' || c == '*' || c == '%' {
-            tokens.push(Token::new(c.to_string(), TokenType::BinaryOperator));
+            tokens.push(Token::new(c.to_string(), BinaryOperator, line, col));
             chars.next();
+            col += 1;
         } else if c == '!' {
             chars.next();
+            col += 1;
             if let Some(&next_c) = chars.peek()
                 && next_c == '='
             {
-                tokens.push(Token::new("!=".to_string(), TokenType::LogicalOperator));
+                tokens.push(Token::new("!=".to_string(), LogicalOperator, line, col));
                 chars.next();
+                col += 1;
             } else {
-                tokens.push(Token::new(c.to_string(), TokenType::UnaryOperator));
+                tokens.push(Token::new(c.to_string(), UnaryOperator, line, col));
             }
         } else if c == '<' || c == '>' {
             chars.next();
+            col += 1;
             if let Some(&next_c) = chars.peek()
                 && next_c == '='
             {
-                tokens.push(Token::new(format!("{}=", c), TokenType::LogicalOperator));
+                tokens.push(Token::new(format!("{}=", c), LogicalOperator, line, col));
                 chars.next();
+                col += 1;
             } else {
-                tokens.push(Token::new(c.to_string(), TokenType::LogicalOperator));
+                tokens.push(Token::new(c.to_string(), LogicalOperator, line, col));
             }
         } else if c == '"' || c == '\'' {
             chars.next();
+            col += 1;
             let mut s = String::new();
             while let Some(&next_c) = chars.peek() {
                 if next_c == c {
@@ -199,47 +253,58 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
                     s.push(next_c);
                 }
                 chars.next();
+                col += 1;
             }
-            tokens.push(Token::new(s, TokenType::String));
+            tokens.push(Token::new(s, StringToken, line, col));
             chars.next();
+            col += 1;
         } else if c == '=' {
             chars.next();
+            col += 1;
             if let Some(&next_c) = chars.peek()
                 && next_c == '='
             {
-                tokens.push(Token::new("==".to_string(), TokenType::LogicalOperator));
+                tokens.push(Token::new("==".to_string(), LogicalOperator, line, col));
                 chars.next();
+                col += 1;
             } else {
-                tokens.push(Token::new(c.to_string(), TokenType::Equals));
+                tokens.push(Token::new(c.to_string(), Equals, line, col));
             }
         } else if c == ',' {
-            tokens.push(Token::new(c.to_string(), TokenType::Comma));
+            tokens.push(Token::new(c.to_string(), Comma, line, col));
             chars.next();
+            col += 1;
         } else if c == '.' {
-            tokens.push(Token::new(c.to_string(), TokenType::Dot));
+            tokens.push(Token::new(c.to_string(), Dot, line, col));
             chars.next();
+            col += 1;
         } else if c == ':' {
-            tokens.push(Token::new(c.to_string(), TokenType::Colon));
+            tokens.push(Token::new(c.to_string(), Colon, line, col));
             chars.next();
+            col += 1;
         } else if c == ';' {
-            tokens.push(Token::new(c.to_string(), TokenType::Semicolon));
+            tokens.push(Token::new(c.to_string(), Semicolon, line, col));
             chars.next();
+            col += 1;
         } else {
             // Multicharacter tokens
+            let start_line = line;
+            let start_col = col;
             if c.is_alphabetic() || c == '_' {
                 let mut ident = String::new();
                 while let Some(&next_c) = chars.peek() {
                     if next_c.is_alphanumeric() || next_c == '_' {
                         ident.push(next_c);
                         chars.next();
+                        col += 1;
                     } else {
                         break;
                     }
                 }
                 let t: TokenType = keyword(ident.clone());
                 match t {
-                    TokenType::UnaryOperator => tokens.push(Token::new("!".to_string(), t)),
-                    TokenType::LogicalOperator => tokens.push(Token::new(
+                    UnaryOperator => tokens.push(Token::new("!".to_string(), t, line, col)),
+                    LogicalOperator => tokens.push(Token::new_multichar(
                         match ident.as_str() {
                             "and" => "&&".to_string(),
                             "et" => "&&".to_string(),
@@ -250,8 +315,14 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
                             _ => ident,
                         },
                         t,
+                        start_line,
+                        start_col,
+                        line,
+                        col,
                     )),
-                    _ => tokens.push(Token::new(ident, t)),
+                    _ => tokens.push(Token::new_multichar(
+                        ident, t, start_line, start_col, line, col,
+                    )),
                 }
             } else if c.is_numeric() {
                 let mut num = String::new();
@@ -259,20 +330,30 @@ pub fn tokenize(source_code: &str) -> Result<Vec<Token>, LexerError> {
                     if next_c.is_numeric() || next_c == '.' {
                         num.push(next_c);
                         chars.next();
+                        col += 1;
                     } else {
                         break;
                     }
                 }
-                tokens.push(Token::new(num, TokenType::Number));
+                tokens.push(Token::new_multichar(
+                    num, Number, start_line, start_col, line, col,
+                ));
             } else if skippable(c) {
                 chars.next();
+                col += 1;
             } else {
-                return Err(LexerError::UnknownCharacter(c));
+                return Err(LexerError::with_span(
+                    UnknownCharacter(c),
+                    Span {
+                        start: Position { line, col },
+                        end: Position { line, col },
+                    },
+                ));
             }
         }
     }
 
-    tokens.push(Token::new("EOF".to_string(), TokenType::EOF));
+    tokens.push(Token::new("EOF".to_string(), EOF, line, col));
 
     Ok(tokens)
 }

@@ -8,6 +8,7 @@ use std::rc::Rc;
 mod frontend;
 mod runtime;
 
+use crate::frontend::errors::format_error_snippet;
 use crate::frontend::lexer::tokenize;
 use crate::frontend::parser::Parser;
 use crate::runtime::environment::Environment;
@@ -34,9 +35,30 @@ fn run_code(
     code: &str,
     env: &Rc<RefCell<Environment>>,
 ) -> Result<RuntimeVal, Box<dyn std::error::Error>> {
-    let tokens = tokenize(code)?;
-    let program = Parser::new(tokens).produce_ast()?;
-    let result = interpreter::evaluate(program, env)?;
+    let tokens = match tokenize(code) {
+        Ok(ast) => ast,
+        Err(error) => {
+            eprintln!("{}", error);
+            eprintln!("{}", format_error_snippet(code, &error.span));
+            exit(1);
+        }
+    };
+    let program = match Parser::new(tokens).produce_ast() {
+        Ok(ast) => ast,
+        Err(error) => {
+            eprintln!("{}", error);
+            eprintln!("{}", format_error_snippet(code, &error.span));
+            exit(1);
+        }
+    };
+    let result = match interpreter::evaluate(program, env) {
+        Ok(r) => r,
+        Err(error) => {
+            eprintln!("{}", error);
+            eprintln!("{}", format_error_snippet(code, &error.span));
+            exit(1);
+        }
+    };
     Ok(result)
 }
 
